@@ -1,0 +1,48 @@
+{
+  "$comment": "Stack contract (ADR-0006). Applied add-only by /stack-node:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "npm": {
+      "scope": "repo",
+      "companion": true,
+      "detect": { "files": ["package.json"] },
+      "paths": ["**/package.json", "**/.npmrc"],
+      "rules": ["npm-dependencies.md"]
+    },
+    "node": {
+      "detect": [
+        { "dependencies": ["fastify", "@nestjs/core", "express", "koa", "hono", "@hapi/hapi"] },
+        { "notDependencies": ["react", "react-dom", "next", "vue", "nuxt", "svelte", "@sveltejs/kit", "@angular/core", "vite", "solid-js", "react-native", "expo"] }
+      ],
+      "paths": ["**/*.{ts,mts,cts,js,mjs,cjs}"],
+      "rules": ["node.md"]
+    },
+    "fastify": {
+      "detect": { "dependencies": ["fastify"] },
+      "paths": ["**/*.{ts,mts,js,mjs}"],
+      "rules": ["fastify.md"]
+    },
+    "nest": {
+      "detect": { "dependencies": ["@nestjs/core"] },
+      "paths": ["**/*.ts"],
+      "rules": ["nest.md"]
+    }
+  },
+  "format": [
+    { "glob": "**/*.{ts,mts,cts,js,mjs,cjs,json}", "run": "npx --no-install prettier --write --log-level warn {file}", "when": { "dependencies": ["prettier"] } },
+    { "glob": "**/*.{ts,mts,cts,js,mjs,cjs,json}", "run": "npx --no-install biome format --write {file}", "when": { "dependencies": ["@biomejs/biome"] } }
+  ],
+  "formatHint": "add prettier (or @biomejs/biome) as a devDependency and re-run setup",
+  "verify": {
+    "fast": [
+      { "name": "typecheck", "script": "typecheck", "recommended": "tsc --noEmit for every package" },
+      { "name": "lint", "script": "lint", "recommended": "eslint or biome lint" },
+      { "name": "test:unit", "script": "test:unit" }
+    ],
+    "full": [
+      { "name": "test", "script": "test", "recommended": "every test, including integration tests" },
+      { "name": "build", "script": "build" }
+    ]
+  },
+  "dependabot": { "ecosystem": "npm", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+  "lsp": { "binary": "typescript-language-server", "install": "npm install -g typescript-language-server typescript" }
+}

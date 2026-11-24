@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify --full
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # >>> ideal-agentic-env:services (stack plugins' setup writes here; edit outside these markers)
+    # <<< ideal-agentic-env:services
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+{{STACK_SETUP}}
+      # >>> ideal-agentic-env:steps (stack plugins' setup writes here; edit outside these markers)
+      # <<< ideal-agentic-env:steps
+      - run: node scripts/verify.mjs --full
+      # >>> ideal-agentic-env:after (stack plugins' setup writes here; edit outside these markers)
+      # <<< ideal-agentic-env:after

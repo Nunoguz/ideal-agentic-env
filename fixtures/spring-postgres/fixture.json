@@ -1,0 +1,12 @@
+{
+  "$comment": "stack-java-spring with data-sql on PostgreSQL through Testcontainers: setup detects java, spring-boot, modulith and test, plus sql, postgres and flyway; migration-check reads the Flyway migration; verify --full compiles and runs the Modulith, MockMvc and Testcontainers tests (Docker needed); then governance's dependency gate checks the Maven dependency tree's vulnerabilities and licenses.",
+  "setups": ["stack-java-spring", "data-sql"],
+  "install": [],
+  "gates": ["dependency"],
+  "expect": {
+    "profiles": {
+      "stack-java-spring": ["java", "spring-boot", "modulith", "test"],
+      "data-sql": ["sql", "postgres", "flyway"]
+    }
+  }
+}

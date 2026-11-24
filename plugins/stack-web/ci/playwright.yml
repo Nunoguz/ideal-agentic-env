@@ -1,0 +1,3 @@
+# The browser version comes from the pinned @playwright/test in the lockfile (stack-web).
+- run: npx playwright install --with-deps chromium
+  working-directory: {{DIR}}

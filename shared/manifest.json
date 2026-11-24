@@ -1,0 +1,63 @@
+{
+  "$comment": "Files vendored into more than one plugin (an installed plugin ships only its own directory). Edit the file under shared/, then run `npm run sync`. `npm run validate` fails when a copy drifts.",
+  "files": {
+    "hooks-lib/io.mjs": [
+      "plugins/core/hooks/lib/io.mjs",
+      "plugins/governance/hooks/lib/io.mjs"
+    ],
+    "hooks-lib/paths.mjs": [
+      "plugins/core/hooks/lib/paths.mjs",
+      "plugins/governance/hooks/lib/paths.mjs"
+    ],
+    "hooks-lib/plugin.mjs": [
+      "plugins/core/hooks/lib/plugin.mjs",
+      "plugins/governance/hooks/lib/plugin.mjs"
+    ],
+    "hooks-lib/state.mjs": [
+      "plugins/core/hooks/lib/state.mjs",
+      "plugins/governance/hooks/lib/state.mjs"
+    ],
+    "scaffold-lib.mjs": [
+      "plugins/data-sql/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/design/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/devops-selfhosted/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/governance/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/stack-dotnet/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/stack-java-spring/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/stack-mobile/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/stack-node/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/stack-web/skills/setup/scripts/scaffold-lib.mjs",
+      "plugins/work-github/skills/setup/scripts/scaffold-lib.mjs"
+    ],
+    "stack-lib.mjs": [
+      "plugins/data-sql/skills/setup/scripts/stack-lib.mjs",
+      "plugins/design/skills/setup/scripts/stack-lib.mjs",
+      "plugins/devops-selfhosted/skills/setup/scripts/stack-lib.mjs",
+      "plugins/stack-dotnet/skills/setup/scripts/stack-lib.mjs",
+      "plugins/stack-java-spring/skills/setup/scripts/stack-lib.mjs",
+      "plugins/stack-mobile/skills/setup/scripts/stack-lib.mjs",
+      "plugins/stack-node/skills/setup/scripts/stack-lib.mjs",
+      "plugins/stack-web/skills/setup/scripts/stack-lib.mjs"
+    ],
+    "stack-setup.mjs": [
+      "plugins/data-sql/skills/setup/scripts/setup.mjs",
+      "plugins/design/skills/setup/scripts/setup.mjs",
+      "plugins/devops-selfhosted/skills/setup/scripts/setup.mjs",
+      "plugins/stack-dotnet/skills/setup/scripts/setup.mjs",
+      "plugins/stack-java-spring/skills/setup/scripts/setup.mjs",
+      "plugins/stack-mobile/skills/setup/scripts/setup.mjs",
+      "plugins/stack-node/skills/setup/scripts/setup.mjs",
+      "plugins/stack-web/skills/setup/scripts/setup.mjs"
+    ],
+    "npm-cooldown.mjs": [
+      "plugins/stack-mobile/skills/upgrade-deps/scripts/npm-cooldown.mjs",
+      "plugins/stack-node/skills/upgrade-deps/scripts/npm-cooldown.mjs",
+      "plugins/stack-web/skills/upgrade-deps/scripts/npm-cooldown.mjs"
+    ],
+    "rules/npm-dependencies.md": [
+      "plugins/stack-mobile/rules/npm-dependencies.md",
+      "plugins/stack-node/rules/npm-dependencies.md",
+      "plugins/stack-web/rules/npm-dependencies.md"
+    ]
+  }
+}

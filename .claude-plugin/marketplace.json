@@ -1,0 +1,76 @@
+{
+  "name": "ideal-agentic-env",
+  "description": "Production-grade Claude Code environment for enterprise-quality software: constitution, guardrails, compliance, design and stack plugins.",
+  "owner": {
+    "name": "Nunoguz",
+    "url": "https://github.com/Nunoguz"
+  },
+  "plugins": [
+    {
+      "name": "core",
+      "source": "./plugins/core",
+      "description": "Mandatory foundation: engineering constitution, safety hooks, plan/implement/verify workflow, core subagents.",
+      "category": "workflow"
+    },
+    {
+      "name": "governance",
+      "source": "./plugins/governance",
+      "description": "Mandatory compliance layer: KVKK/GDPR data inventory, threat modeling, audit logging, SOC 2 and ISO 27001 evidence.",
+      "category": "compliance"
+    },
+    {
+      "name": "work-github",
+      "source": "./plugins/work-github",
+      "description": "Work intake on GitHub Issues/Projects and local PBI files with one shared schema, through to the pull request.",
+      "category": "workflow"
+    },
+    {
+      "name": "design",
+      "source": "./plugins/design",
+      "description": "Per-project design language, design tokens, UI quality rules, accessibility and visual verification.",
+      "category": "design"
+    },
+    {
+      "name": "data-sql",
+      "source": "./plugins/data-sql",
+      "description": "Relational database discipline: safe migrations (SQL and EF Core), indexing, row-level security, query review (PostgreSQL, SQL Server, MySQL).",
+      "category": "data"
+    },
+    {
+      "name": "stack-web",
+      "source": "./plugins/stack-web",
+      "description": "TypeScript/JavaScript frontend: React, Next.js, Vue and Nuxt rules, scaffolding, testing, performance budgets.",
+      "category": "stack"
+    },
+    {
+      "name": "stack-node",
+      "source": "./plugins/stack-node",
+      "description": "TypeScript/JavaScript backend: Node, NestJS, Fastify rules, scaffolding and testing.",
+      "category": "stack"
+    },
+    {
+      "name": "stack-dotnet",
+      "source": "./plugins/stack-dotnet",
+      "description": ".NET / C#: nullable and analyzer discipline, ASP.NET Core patterns, NuGet cooldown, testing with WebApplicationFactory.",
+      "category": "stack"
+    },
+    {
+      "name": "stack-java-spring",
+      "source": "./plugins/stack-java-spring",
+      "description": "Java / Spring Boot with Maven or Gradle: Spring Modulith boundaries, ArchUnit, Flyway, Testcontainers, dependency cooldown.",
+      "category": "stack"
+    },
+    {
+      "name": "stack-mobile",
+      "source": "./plugins/stack-mobile",
+      "description": "[experimental] Mobile with React Native and Expo: rendering, accessibility, secure storage, SDK-managed versions, store and privacy rules, device checks on simulators.",
+      "category": "stack"
+    },
+    {
+      "name": "devops-selfhosted",
+      "source": "./plugins/devops-selfhosted",
+      "description": "Self-hosted DevOps: Dockerfile, Compose and Kubernetes rules (Kubernetes experimental), container scanning, guarded deploy commands, deploy, secrets, observability and backups.",
+      "category": "devops"
+    }
+  ]
+}

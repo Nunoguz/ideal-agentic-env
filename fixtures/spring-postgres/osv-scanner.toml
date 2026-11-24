@@ -1,0 +1,23 @@
+# OSV-Scanner exceptions (governance dependency gate). Accepted by the repository owner on 2026-11-24 for this
+# fixture; a real project's owner decides its own. Vulnerability scanning still applies to these packages.
+
+[[PackageOverrides]]
+name = "ch.qos.logback:logback-classic"
+ecosystem = "Maven"
+license.ignore = true
+effectiveUntil = 2027-05-31
+reason = "Logback, Spring Boot's default logging backend, dual-licensed EPL-2.0 or LGPL-2.1; used unmodified as a library. Accepted by the repository owner on 2026-11-24."
+
+[[PackageOverrides]]
+name = "ch.qos.logback:logback-core"
+ecosystem = "Maven"
+license.ignore = true
+effectiveUntil = 2027-05-31
+reason = "Logback, Spring Boot's default logging backend, dual-licensed EPL-2.0 or LGPL-2.1; used unmodified as a library. Accepted by the repository owner on 2026-11-24."
+
+[[PackageOverrides]]
+name = "jakarta.annotation:jakarta.annotation-api"
+ecosystem = "Maven"
+license.ignore = true
+effectiveUntil = 2027-05-31
+reason = "Jakarta Annotations API (EPL-2.0 or GPL-2.0 with the Classpath Exception), a Jakarta EE specification API that Spring Boot depends on; used unmodified. Accepted by the repository owner on 2026-11-24."

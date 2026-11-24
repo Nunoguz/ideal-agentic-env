@@ -1,0 +1,14 @@
+[
+  { "name": "type:feature", "color": "1d76db", "description": "New capability" },
+  { "name": "type:bug", "color": "d73a4a", "description": "Something does not work as specified" },
+  { "name": "type:chore", "color": "cfd3d7", "description": "Maintenance without behaviour change" },
+  { "name": "type:spike", "color": "fbca04", "description": "Time-boxed investigation" },
+  { "name": "status:needs-triage", "color": "ededed", "description": "Not yet checked against the work-item schema" },
+  { "name": "status:ready", "color": "0e8a16", "description": "Meets the schema; small enough for one PR" },
+  { "name": "status:in-progress", "color": "5319e7", "description": "Claimed, branch exists" },
+  { "name": "status:blocked", "color": "b60205", "description": "Waiting on a decision or another item" },
+  { "name": "priority:p1", "color": "b60205", "description": "Now" },
+  { "name": "priority:p2", "color": "d93f0b", "description": "Next" },
+  { "name": "priority:p3", "color": "fbca04", "description": "Later" },
+  { "name": "compliance", "color": "006b75", "description": "Personal data, retention, access or security control impact" }
+]

@@ -1,0 +1,38 @@
+# {{PROJECT_NAME}}
+
+<!-- Project-specific instructions only. The engineering constitution is injected by the core plugin
+     every session — do not repeat it here. Keep this file under ~120 lines; move detail into
+     .claude/rules/ (path-scoped) or docs/. -->
+
+## What this is
+
+<!-- fill: one paragraph — what the system does, for whom, and the business constraints that matter
+     (e.g. regulated data, multi-tenant, offline-first). -->
+
+## Architecture
+
+<!-- fill: the shape in a few bullets — deployable units, module boundaries, data ownership,
+     integration points. Link the ADRs that define them. -->
+
+## Commands
+
+```bash
+node scripts/verify.mjs --fast   # inner loop after each change
+node scripts/verify.mjs --full   # gate before a PR (same as CI)
+```
+
+<!-- fill: run, migrate, seed — only commands a developer actually needs. -->
+
+## Project rules
+
+<!-- fill: rules specific to this codebase that the constitution does not already cover, e.g.
+     "all money is decimal minor units", "tenant id comes only from the token". Each rule that must
+     never break also needs a test or CI check. -->
+
+## Where things live
+
+- Plans: `docs/plans/` — decisions: `docs/adr/` — guardrails: `.claude/rules/guardrails/`
+- Compliance and security records: `docs/compliance/`, `docs/security/` (governance plugin)
+- Work items: GitHub Issues or `docs/pbi/` (work-github plugin)
+- Environment change requests: `docs/ENV_REQUESTS.md`
+- Documentation language: {{DOCS_LANGUAGE}}

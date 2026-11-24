@@ -1,0 +1,206 @@
+#!/usr/bin/env node
+// Container scan (ideal-agentic-env/devops-selfhosted). Builds every image of the repository and scans it with
+// Trivy, and scans Dockerfiles, Compose files, Kubernetes manifests and Helm charts for misconfigurations.
+// Policy (ADR-0009, ADR-0011):
+//   blocking  HIGH/CRITICAL vulnerabilities that have a fixed version; UNKNOWN severity with a fix (fail closed);
+//             secrets baked into an image; HIGH/CRITICAL misconfigurations
+//   reported  vulnerabilities without a fix yet (they turn red once a fix is published), lower severities,
+//             an end-of-life base image OS
+// Exceptions: .trivyignore entries with a comment naming the reason and an expiry (`exp:YYYY-MM-DD`), in a
+// reviewed pull request. The repository owner decides them.
+// Images: devops.images in .claude/ideal-agentic-env.json ([{ "name", "dockerfile", "context" }]), or every
+// Dockerfile in the repository, built from the repository root.
+//
+//   node .github/scripts/container-scan.mjs [--no-build] [--report-issue]
+// Environment: TRIVY (binary, default trivy), DOCKER (default docker), GITHUB_STEP_SUMMARY, GITHUB_TOKEN,
+// GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_SHA. Zero dependencies (Node >= 20).
+import { spawnSync } from "node:child_process";
+import { appendFileSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SKIP = new Set(["node_modules", ".git", "dist", "build", "bin", "obj", ".next", ".nuxt", ".output", "coverage", "vendor"]);
+const BLOCKING = new Set(["HIGH", "CRITICAL"]);
+export const ISSUE_TITLE = "[vulnerability-report] Container images: findings that do not block";
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+
+/** Images to build: from devops.images, else every Dockerfile (context = repository root). */
+export function images(root, configText = "") {
+  let cfg = {};
+  try {
+    cfg = JSON.parse(configText || "{}");
+  } catch {
+    throw new Error(".claude/ideal-agentic-env.json is not valid JSON");
+  }
+  const listed = cfg?.devops?.images;
+  if (Array.isArray(listed) && listed.length) {
+    for (const i of listed) if (typeof i?.dockerfile !== "string") throw new Error("devops.images entries need a dockerfile path");
+    return listed.map((i) => ({ name: String(i.name ?? basename(dirname(i.dockerfile)) ?? "app").toLowerCase().replace(/[^a-z0-9._-]+/g, "-"), dockerfile: i.dockerfile, context: i.context ?? "." }));
+  }
+  const found = [];
+  const visit = (dir, depth) => {
+    let entries = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (!SKIP.has(e.name) && !e.name.startsWith(".") && depth < 6) visit(join(dir, e.name), depth + 1);
+      } else if (e.name === "Dockerfile" || e.name === "Containerfile" || e.name.endsWith(".Dockerfile")) {
+        const rel = relative(root, join(dir, e.name)).replace(/\\/g, "/");
+        const name = (e.name.endsWith(".Dockerfile") ? e.name.slice(0, -".Dockerfile".length) : dir === root ? "app" : basename(dir)).toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+        found.push({ name, dockerfile: rel, context: "." });
+      }
+    }
+  };
+  visit(root, 0);
+  return found.sort((a, b) => a.dockerfile.localeCompare(b.dockerfile));
+}
+
+/** Findings of one Trivy JSON report (image or config). */
+export function classify(report, source) {
+  const blocking = [];
+  const reported = [];
+  if (report?.Metadata?.OS?.EOSL) reported.push({ source, finding: `base image OS ${report.Metadata.OS.Family} ${report.Metadata.OS.Name} is end of life`, severity: "EOL", why: "upgrade the base image" });
+  for (const r of report?.Results ?? []) {
+    for (const v of r.Vulnerabilities ?? []) {
+      const sev = String(v.Severity ?? "UNKNOWN").toUpperCase();
+      const fixed = Boolean(v.FixedVersion);
+      const f = { source, finding: `${v.VulnerabilityID} ${v.PkgName} ${v.InstalledVersion}${fixed ? ` (fixed in ${v.FixedVersion})` : ""}`, severity: sev, target: r.Target };
+      if ((BLOCKING.has(sev) || sev === "UNKNOWN") && fixed) blocking.push({ ...f, why: sev === "UNKNOWN" ? "no severity published, a fix exists (fail closed)" : "a fix exists" });
+      else reported.push({ ...f, why: fixed ? "below HIGH" : "no fix published yet" });
+    }
+    for (const s of r.Secrets ?? []) blocking.push({ source, finding: `secret ${s.RuleID} in ${r.Target}${s.StartLine ? `:${s.StartLine}` : ""}`, severity: "SECRET", target: r.Target, why: "a secret is baked into the image" });
+    for (const m of r.Misconfigurations ?? []) {
+      if (m.Status && m.Status !== "FAIL") continue;
+      const sev = String(m.Severity ?? "UNKNOWN").toUpperCase();
+      const f = { source, finding: `${m.ID ?? m.AVDID} ${m.Title ?? ""} (${r.Target})`.trim(), severity: sev, target: r.Target };
+      (BLOCKING.has(sev) ? blocking : reported).push({ ...f, why: BLOCKING.has(sev) ? "misconfiguration" : "misconfiguration below HIGH" });
+    }
+  }
+  return { blocking, reported };
+}
+
+const run = (spawn, cmd, args, opts = {}) => {
+  const r = spawn(cmd, args, { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, windowsHide: true, ...opts });
+  if (r.error) throw new Error(`could not run ${cmd}: ${r.error.message}`);
+  return r;
+};
+const parseJson = (text, what) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${what} did not print JSON`);
+  }
+};
+
+/** Scan everything; returns { blocking, reported, scanned }. Build or scanner failures throw (fail closed). */
+export function scanAll(root, { list, build = true, spawn = spawnSync, trivy = process.env.TRIVY || "trivy", docker = process.env.DOCKER || "docker", tag = (process.env.GITHUB_SHA || "local").slice(0, 12) } = {}) {
+  const out = { blocking: [], reported: [], scanned: [] };
+  const add = (r) => {
+    out.blocking.push(...r.blocking);
+    out.reported.push(...r.reported);
+  };
+  const config = run(spawn, trivy, ["config", "--format", "json", "--quiet", "--skip-dirs", "**/node_modules", "."], { cwd: root });
+  if (config.status !== 0) throw new Error(`trivy config exited with ${config.status}: ${String(config.stderr).trim().split("\n").slice(-5).join("\n")}`);
+  add(classify(parseJson(config.stdout, "trivy config"), "config"));
+  out.scanned.push("config");
+  for (const img of list) {
+    const ref = `iae-scan/${img.name}:${tag}`;
+    if (build) {
+      const b = run(spawn, docker, ["build", "--pull", "-f", img.dockerfile, "-t", ref, img.context], { cwd: root, stdio: ["ignore", "inherit", "inherit"] });
+      if (b.status !== 0) throw new Error(`docker build of ${img.dockerfile} failed (exit ${b.status})`);
+    }
+    const s = run(spawn, trivy, ["image", "--format", "json", "--quiet", "--scanners", "vuln,secret", ref], { cwd: root });
+    if (s.status !== 0) throw new Error(`trivy image ${ref} exited with ${s.status}: ${String(s.stderr).trim().split("\n").slice(-5).join("\n")}`);
+    add(classify(parseJson(s.stdout, `trivy image ${ref}`), img.name));
+    out.scanned.push(img.name);
+  }
+  return out;
+}
+
+const table = (items) => ["| Source | Finding | Severity | Why |", "| --- | --- | --- | --- |", ...items.map((f) => `| ${f.source} | ${f.finding.replace(/\|/g, "\\|")} | ${f.severity} | ${f.why} |`)];
+
+export function renderSummary({ blocking, reported, scanned }) {
+  return [
+    "## Container scan",
+    "",
+    `Scanned: ${scanned.join(", ") || "nothing"}. Policy: HIGH/CRITICAL vulnerabilities with a fix, secrets in images and HIGH/CRITICAL misconfigurations fail; vulnerabilities without a fix are reported until one is published.`,
+    "",
+    `### Blocking (${blocking.length})`,
+    ...(blocking.length ? ["", ...table(blocking)] : ["", "None."]),
+    "",
+    `### Reported, not blocking (${reported.length})`,
+    ...(reported.length ? ["", ...table(reported.slice(0, 200)), ...(reported.length > 200 ? ["", `…and ${reported.length - 200} more.`] : [])] : ["", "None."]),
+    ...(blocking.length ? ["", "Fix: update the base image or the package. If you cannot, the repository owner may accept an exception in `.trivyignore` with a comment naming the reason and `exp:YYYY-MM-DD`, in a reviewed pull request."] : []),
+  ].join("\n");
+}
+
+export function makeApi({ token, base = "https://api.github.com", fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  return async function api(path, { method = "GET", body } = {}) {
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetchImpl(`${base}${path}`, {
+        method,
+        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (res.ok) return res.status === 204 ? null : res.json();
+      if (attempt >= 3 || !RETRYABLE.has(res.status)) throw new Error(`GitHub API ${method} ${path} returned ${res.status}`);
+      await sleep(2000 * attempt);
+    }
+  };
+}
+
+/** One open report issue: created or updated while there are findings, closed when there are none. */
+export async function upsertReportIssue(api, repo, reported, body) {
+  let existing = null;
+  for (let page = 1; page <= 5 && !existing; page++) {
+    const issues = await api(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+    existing = (issues ?? []).find((i) => !i.pull_request && i.title === ISSUE_TITLE) ?? null;
+    if ((issues ?? []).length < 100) break;
+  }
+  if (!reported.length) {
+    if (!existing) return { action: "none" };
+    await api(`/repos/${repo}/issues/${existing.number}`, { method: "PATCH", body: { state: "closed", body } });
+    return { action: "closed", number: existing.number };
+  }
+  if (existing) {
+    await api(`/repos/${repo}/issues/${existing.number}`, { method: "PATCH", body: { body } });
+    return { action: "updated", number: existing.number };
+  }
+  const created = await api(`/repos/${repo}/issues`, { method: "POST", body: { title: ISSUE_TITLE, body } });
+  return { action: "created", number: created?.number };
+}
+
+const isMain = Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (isMain) {
+  try {
+    const args = process.argv.slice(2);
+    for (const a of args) if (!["--no-build", "--report-issue"].includes(a)) throw new Error(`unknown argument: ${a}`);
+    let configText = "";
+    try {
+      configText = readFileSync(".claude/ideal-agentic-env.json", "utf8");
+    } catch {
+      /* no config: discover the Dockerfiles */
+    }
+    const list = images(".", configText);
+    const result = scanAll(".", { list, build: !args.includes("--no-build") });
+    const summary = renderSummary(result);
+    console.log(summary);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+    if (args.includes("--report-issue")) {
+      const api = makeApi({ token: process.env.GITHUB_TOKEN, base: process.env.GITHUB_API_URL || "https://api.github.com" });
+      const body = `${summary}\n\nUpdated by the scheduled \`container\` run on ${new Date().toISOString().slice(0, 10)} (ideal-agentic-env/devops-selfhosted).`;
+      const r = await upsertReportIssue(api, process.env.GITHUB_REPOSITORY, result.reported, body);
+      console.log(`Report issue: ${r.action}${r.number ? ` #${r.number}` : ""}`);
+      process.exit(0);
+    }
+    for (const f of result.blocking) console.log(`::error::${f.source}: ${f.finding} (${f.why})`);
+    process.exit(result.blocking.length ? 1 : 0);
+  } catch (err) {
+    console.error(`container-scan: ${err.message}`);
+    process.exit(2);
+  }
+}

@@ -1,0 +1,12 @@
+---
+name: setup
+description: Wire {{NAME}} into the current project - path-scoped {{PROVIDER}} rules for infrastructure files and guarded destructive {{CLI}} commands for core's shell guard. Add-only. Use only when the user runs /{{NAME}}:setup or explicitly asks to set up {{PROVIDER}} tooling.
+disable-model-invocation: true
+argument-hint: "[--refresh]"
+---
+
+# Set up {{PROVIDER}}
+
+`scripts/setup.mjs` in this skill's directory applies the plugin's `stack.json` contract. Run the dry run first (`node "<this skill's directory>/scripts/setup.mjs" --target . --dry-run`), show every line to the user, ask, then run it without `--dry-run`.
+
+It installs the rules under `.claude/rules/{{NAME}}/` and adds `guardedCommands` to `.claude/ideal-agentic-env.json`, so core's shell guard asks before {{PROVIDER}}'s destructive commands.

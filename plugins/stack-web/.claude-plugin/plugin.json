@@ -1,0 +1,16 @@
+{
+  "name": "stack-web",
+  "version": "1.0.0",
+  "description": "TypeScript/JavaScript frontend: React, Next.js, Vue and Nuxt rules, scaffolding, testing, performance budgets.",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "stack",
+    "web",
+    "react",
+    "nextjs",
+    "typescript"
+  ]
+}

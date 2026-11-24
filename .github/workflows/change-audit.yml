@@ -1,0 +1,36 @@
+# Managed by governance 0.2.0 (ideal-agentic-env). /governance:setup --refresh updates this file while it is unedited; edit it and setup leaves it alone. sha256:42cc0c25c7a599d6
+name: change-audit
+
+# Detective control (ideal-agentic-env/governance) for change management, SOC 2 CC8.1 and ISO 27001
+# A.8.32. Every commit that lands on the default branch must come from a merged pull request whose
+# head commit had green checks. A violation fails this run and opens a "[change-control]" issue.
+# This matters most where the hosting plan has no branch protection.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  issues: write
+
+jobs:
+  audit:
+    name: commits came from green pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: node .github/scripts/change-audit.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPEN_ISSUE: "true"
+          # "true" also requires an approving review by someone other than the author.
+          REQUIRE_APPROVAL: "false"

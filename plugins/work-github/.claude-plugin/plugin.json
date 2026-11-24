@@ -1,0 +1,15 @@
+{
+  "name": "work-github",
+  "version": "1.0.0",
+  "description": "Work intake on GitHub Issues/Projects and local PBI files with one shared schema, through to the pull request.",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "workflow",
+    "github",
+    "issues",
+    "backlog"
+  ]
+}

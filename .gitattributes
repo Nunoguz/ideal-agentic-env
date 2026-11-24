@@ -1,0 +1,5 @@
+# Normalize line endings so hooks, templates and tests behave identically on Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

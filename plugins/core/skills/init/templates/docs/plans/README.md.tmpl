@@ -1,0 +1,28 @@
+# Plans
+
+One file per task: `YYYY-MM-DD-<slug>.md`, written by the `plan` skill, approved before any code, and
+executed by the `implement` skill in a fresh session. Plans are kept after merge as a record.
+
+## Structure
+
+```markdown
+# <Goal in one line>
+
+- **Source:** #<issue> | docs/pbi/<file> | request
+- **Status:** draft | approved | in progress | done
+
+## Goal
+## Context
+## Acceptance criteria
+- [ ] <testable criterion>
+## Out of scope
+## Approach
+<chosen design> — rejected: <alternative> because <reason>
+## Risks and guardrails
+## Data and compliance impact
+<new personal data? new processor? retention? — or "none">
+## Slices
+- [ ] 1. <small step> — test: <the test that proves it>
+## Verification
+<what `verify --full` covers, plus any manual check>
+```

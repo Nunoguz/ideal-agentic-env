@@ -1,0 +1,6 @@
+{
+  "$comment": "stack-web's Nuxt profile: setup detects web, vue and nuxt; verify --full runs nuxi typecheck, the production build and the bundle budget.",
+  "setups": ["stack-web"],
+  "install": ["npm ci --no-audit --no-fund"],
+  "expect": { "profiles": { "stack-web": ["web", "vue", "nuxt", "npm"] } }
+}

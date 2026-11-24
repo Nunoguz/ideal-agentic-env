@@ -1,0 +1,60 @@
+{
+  "$comment": "Stack contract (ADR-0006, ADR-0010). Applied add-only by /stack-java-spring:setup; validated by scripts/validate.mjs. Verify steps run the build at the repository root through its wrapper.",
+  "ecosystem": "jvm",
+  "profiles": {
+    "java": {
+      "scope": "repo",
+      "detect": { "files": ["**/pom.xml", "**/build.gradle", "**/build.gradle.kts"] },
+      "paths": ["**/*.java", "**/pom.xml", "**/build.gradle", "**/build.gradle.kts", "gradle/libs.versions.toml"],
+      "rules": ["java.md"]
+    },
+    "spring-boot": {
+      "detect": { "dependencyPrefixes": ["org.springframework.boot:spring-boot-starter"] },
+      "paths": ["src/main/**/*.java", "src/main/resources/application*.{yml,yaml,properties}"],
+      "rules": ["spring-boot.md"]
+    },
+    "modulith": {
+      "detect": { "dependencyPrefixes": ["org.springframework.modulith:"] },
+      "paths": ["src/main/**/*.java", "src/test/**/*Modul*Tests.java"],
+      "rules": ["modulith.md"]
+    },
+    "test": {
+      "scope": "repo",
+      "detect": { "files": ["**/src/test/java/**/*.java"] },
+      "paths": ["**/src/test/**/*.java", "**/src/test/resources/**"],
+      "rules": ["testing.md"]
+    }
+  },
+  "verify": {
+    "fast": [
+      { "name": "maven compile", "run": { "posix": "./mvnw -B -ntp -q test-compile", "win32": "mvnw.cmd -B -ntp -q test-compile" }, "when": { "files": ["mvnw"] } },
+      { "name": "maven compile", "run": "mvn -B -ntp -q test-compile", "when": { "files": ["pom.xml"], "notFiles": ["mvnw"] } },
+      { "name": "spotless", "run": { "posix": "./mvnw -B -ntp -q spotless:check", "win32": "mvnw.cmd -B -ntp -q spotless:check" }, "when": { "files": ["mvnw"], "fileContains": { "pom.xml": "spotless-maven-plugin" } } },
+      { "name": "gradle compile", "run": { "posix": "./gradlew --console=plain -q testClasses", "win32": "gradlew.bat --console=plain -q testClasses" }, "when": { "files": ["gradlew"] } },
+      { "name": "spotless", "run": { "posix": "./gradlew --console=plain -q spotlessCheck", "win32": "gradlew.bat --console=plain -q spotlessCheck" }, "when": { "files": ["gradlew"], "fileContains": { "build.gradle.kts": "com.diffplug.spotless" } } },
+      { "name": "spotless", "run": { "posix": "./gradlew --console=plain -q spotlessCheck", "win32": "gradlew.bat --console=plain -q spotlessCheck" }, "when": { "files": ["gradlew"], "fileContains": { "build.gradle": "com.diffplug.spotless" } } }
+    ],
+    "full": [
+      { "name": "maven verify", "run": { "posix": "./mvnw -B -ntp verify", "win32": "mvnw.cmd -B -ntp verify" }, "when": { "files": ["mvnw"] } },
+      { "name": "maven verify", "run": "mvn -B -ntp verify", "when": { "files": ["pom.xml"], "notFiles": ["mvnw"] } },
+      { "name": "gradle check", "run": { "posix": "./gradlew --console=plain check", "win32": "gradlew.bat --console=plain check" }, "when": { "files": ["gradlew"] } }
+    ]
+  },
+  "ci": {
+    "steps": [
+      { "file": "ci/setup-java-maven.yml", "when": { "files": ["**/pom.xml"] }, "note": "Testcontainers tests use the runner's Docker; nothing else to configure" },
+      { "file": "ci/setup-java-gradle.yml", "when": { "files": ["**/build.gradle", "**/build.gradle.kts"], "notFiles": ["**/pom.xml"] }, "note": "Testcontainers tests use the runner's Docker; nothing else to configure" }
+    ]
+  },
+  "hints": [
+    { "when": { "files": ["pom.xml"], "notFiles": ["mvnw"] }, "note": "no Maven wrapper (mvnw); the verify steps call mvn from PATH. Add the wrapper so everyone and CI use the same Maven: mvn wrapper:wrapper with a Maven version published at least 14 days ago" },
+    { "when": { "files": ["**/build.gradle", "**/build.gradle.kts"], "notFiles": ["gradlew"] }, "note": "no Gradle wrapper (gradlew) at the repository root, so no Gradle verify step was added; run gradle wrapper and re-run setup" },
+    { "when": { "files": ["**/pom.xml", "**/build.gradle", "**/build.gradle.kts"], "notFiles": ["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"] }, "note": "the build is not at the repository root, so no verify step was added; add one by hand that runs the wrapper in its directory" },
+    { "when": { "files": ["pom.xml"], "notFileContains": { "pom.xml": "spotless-maven-plugin" } }, "note": "no formatter: add the Spotless Maven plugin (palantir-java-format or google-java-format) and re-run setup, which then adds spotless:check to verify --fast. Java files are not formatted per edit: a JVM start per file is too slow" }
+  ],
+  "dependabot": [
+    { "ecosystem": "maven", "lockfiles": [], "when": { "files": ["**/pom.xml"] } },
+    { "ecosystem": "gradle", "lockfiles": [], "when": { "files": ["**/build.gradle", "**/build.gradle.kts"] } }
+  ],
+  "lsp": { "binary": "jdtls", "install": "brew install jdtls on macOS; elsewhere a milestone build from download.eclipse.org/jdtls/milestones on PATH (a release published at least 14 days ago)" }
+}

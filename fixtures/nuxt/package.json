@@ -1,0 +1,23 @@
+{
+  "name": "fixture-nuxt",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "nuxi typecheck",
+    "build": "nuxi build",
+    "postinstall": "nuxi prepare"
+  },
+  "dependencies": {
+    "nuxt": "4.6.4",
+    "vue": "3.5.45",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.14",
+    "@vue/typescript-plugin": "3.3.14"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

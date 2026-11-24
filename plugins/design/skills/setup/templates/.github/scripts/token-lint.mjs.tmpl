@@ -1,0 +1,195 @@
+#!/usr/bin/env node
+// Design token lint (ideal-agentic-env/design). Runs as a verify step, so Claude's Stop hook, the
+// developer's terminal and CI run the same check. Zero dependencies (Node >= 20).
+//
+// UI code takes colors and sizes from the design tokens (DESIGN.md), never as literals. This check reads
+// the lines added since the base branch in UI files (design.uiGlobs) outside the token files
+// (design.tokenFiles) and reports literal colors (hex, rgb(), hsl(), oklch(), ...) and lengths (px, rem, em).
+// Existing code is not flagged until it is touched; --all checks every line.
+// A justified exception sits on the same line or the line above:   token-lint: allow <reason>
+//
+//   node .github/scripts/token-lint.mjs [--base <ref>] [--all]
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const DEFAULTS = {
+  tokenFiles: ["**/tokens.{css,scss,ts,js,json}", "**/design-tokens.*", "DESIGN.md"],
+  uiGlobs: ["**/*.{tsx,jsx,vue,svelte,css,scss}"],
+};
+const IGNORED = ["**/node_modules/**", "**/*.{test,spec,stories}.*", "**/__tests__/**", "**/dist/**", "**/.next/**", "**/build/**"];
+
+// ---------- globs ----------
+
+function expand(glob) {
+  const m = /\{([^{}]*)\}/.exec(glob);
+  return m ? m[1].split(",").flatMap((alt) => expand(glob.slice(0, m.index) + alt + glob.slice(m.index + m[0].length))) : [glob];
+}
+function globRe(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        const slash = glob[i + 2] === "/";
+        re += slash ? "(?:.*/)?" : ".*";
+        i += slash ? 2 : 1;
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`, "i"); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- globs from the protected project config, metacharacters escaped
+}
+const matcher = (globs) => {
+  const res = globs.flatMap(expand).map(globRe);
+  return (path) => res.some((re) => re.test(path));
+};
+
+// ---------- settings and git ----------
+
+export function loadSettings(root) {
+  let cfg = {};
+  try {
+    cfg = JSON.parse(readFileSync(join(root, ".claude", "ideal-agentic-env.json"), "utf8"));
+  } catch {
+    cfg = {};
+  }
+  const list = (v, d) => (Array.isArray(v) && v.every((g) => typeof g === "string") && v.length ? v : d);
+  return { tokenFiles: list(cfg.design?.tokenFiles, DEFAULTS.tokenFiles), uiGlobs: list(cfg.design?.uiGlobs, DEFAULTS.uiGlobs) };
+}
+
+function git(root, args) {
+  const r = spawnSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true, timeout: 60000, maxBuffer: 64 * 1024 * 1024 });
+  return r.status === 0 ? r.stdout : null;
+}
+
+/** Same base rules as data-sql's migration-check: --base, the PR base in CI, else the merge base locally. */
+export function resolveBase(root, { base, env = process.env } = {}) {
+  const verify = (ref) => git(root, ["rev-parse", "--verify", "--quiet", ref]) !== null;
+  if (base) return verify(`${base}^{commit}`) ? { ref: base } : { error: `base ${base} not found` };
+  if (env.GITHUB_ACTIONS === "true" && env.GITHUB_EVENT_NAME === "push") return { skip: "push to the default branch; the pull request already ran this check" };
+  if (env.GITHUB_BASE_REF) {
+    const ref = `origin/${env.GITHUB_BASE_REF}`;
+    if (!verify(ref)) git(root, ["fetch", "--no-tags", "--depth=1", "origin", `+refs/heads/${env.GITHUB_BASE_REF}:refs/remotes/${ref}`]);
+    return verify(ref) ? { ref } : { error: `cannot fetch ${ref}` };
+  }
+  const head = git(root, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])?.trim();
+  for (const candidate of [head, "origin/main", "origin/master", "main", "master"].filter(Boolean)) {
+    if (!verify(candidate)) continue;
+    const mb = git(root, ["merge-base", "HEAD", candidate])?.trim();
+    if (mb) return { ref: mb };
+  }
+  return { skip: "no base branch found" };
+}
+
+/** file → [{ line, text }] of lines added since `base` (working tree included; untracked files count fully). */
+export function addedLines(root, base) {
+  const out = new Map();
+  let file = null;
+  let line = 0;
+  for (const l of (git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", base]) ?? "").split("\n")) {
+    if (l.startsWith("+++ ")) {
+      file = l === "+++ /dev/null" ? null : l.slice(6);
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+    if (hunk) {
+      line = Number(hunk[1]);
+      continue;
+    }
+    if (file && l.startsWith("+")) {
+      if (!out.has(file)) out.set(file, []);
+      out.get(file).push({ line, text: l.slice(1) });
+      line++;
+    }
+  }
+  for (const f of (git(root, ["ls-files", "--others", "--exclude-standard"]) ?? "").split("\n").filter(Boolean)) out.set(f, allLines(root, f));
+  return out;
+}
+
+function allLines(root, file) {
+  try {
+    return readFileSync(join(root, file), "utf8").split(/\r?\n/).map((text, i) => ({ line: i + 1, text }));
+  } catch {
+    return [];
+  }
+}
+
+// ---------- rules ----------
+
+const COLOR_RE = /(?<![\w&-])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-])|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(/gi;
+const LENGTH_RE = /(?<![\w.-])-?\d*\.?\d+(?:px|rem|em)\b/gi;
+const ALLOW_RE = /token-lint:\s*allow\s+\S/i;
+
+/** Findings for one line. Hairlines (0, 1px, 0.5px), media/container queries and comments are not flagged. */
+export function lintLine(text) {
+  const trimmed = text.trim();
+  if (!trimmed || /^(\/\/|\/\*|\*|<!--)/.test(trimmed)) return [];
+  if (/^@(media|container|supports|import|font-face)\b/.test(trimmed)) return [];
+  const findings = [];
+  for (const m of text.matchAll(COLOR_RE)) findings.push({ rule: "literal-color", value: m[0] });
+  for (const m of text.matchAll(LENGTH_RE)) {
+    if (/^-?(0|0?\.5|1)px$/i.test(m[0]) || /^-?0(rem|em)$/i.test(m[0])) continue;
+    findings.push({ rule: "literal-length", value: m[0] });
+  }
+  return findings;
+}
+
+export function lintFile(lines, allLinesOfFile = lines) {
+  const byNumber = new Map(allLinesOfFile.map((l) => [l.line, l.text]));
+  const out = [];
+  for (const { line, text } of lines) {
+    if (ALLOW_RE.test(text) || ALLOW_RE.test(byNumber.get(line - 1) ?? "")) continue;
+    for (const f of lintLine(text)) out.push({ line, ...f });
+  }
+  return out;
+}
+
+// ---------- main ----------
+
+export function run(root, { base, all = false, env = process.env } = {}) {
+  const settings = loadSettings(root);
+  const isUi = matcher(settings.uiGlobs);
+  const isToken = matcher(settings.tokenFiles);
+  const isIgnored = matcher(IGNORED);
+  let files;
+  if (all) {
+    files = new Map((git(root, ["ls-files"]) ?? "").split("\n").filter(Boolean).map((f) => [f, null]));
+  } else {
+    const b = resolveBase(root, { base, env });
+    if (b.error) return { code: 2, lines: [`token-lint: ${b.error}`] };
+    if (b.skip) return { code: 0, lines: [`token-lint: skipped (${b.skip})`] };
+    files = addedLines(root, b.ref);
+  }
+  const lines = [];
+  let checked = 0;
+  let count = 0;
+  for (const [file, added] of files) {
+    if (!isUi(file) || isToken(file) || isIgnored(file) || !existsSync(join(root, file))) continue;
+    checked++;
+    const whole = allLines(root, file);
+    for (const f of lintFile(added ?? whole, whole)) {
+      count++;
+      lines.push(`error   ${file}:${f.line}: [${f.rule}] ${f.value} — use a design token (var(--...)) from the token file`);
+    }
+  }
+  lines.push(`token-lint: ${checked} UI file(s) checked, ${count} literal(s) found`);
+  if (count) lines.push("Use a token from DESIGN.md. A justified exception: `token-lint: allow <reason>` on the line or the line above.");
+  return { code: count ? 1 : 0, lines };
+}
+
+const isMain = (() => {
+  try {
+    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (isMain) {
+  const args = process.argv.slice(2);
+  const i = args.indexOf("--base");
+  const result = run(process.cwd(), { base: i >= 0 ? args[i + 1] : undefined, all: args.includes("--all") });
+  for (const l of result.lines) console.log(l);
+  process.exit(result.code);
+}

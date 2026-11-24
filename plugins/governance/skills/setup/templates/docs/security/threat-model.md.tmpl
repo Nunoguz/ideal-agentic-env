@@ -1,0 +1,36 @@
+# Threat model
+
+> Owner: <!-- fill --> · Last reviewed: <!-- fill: YYYY-MM-DD --> · Maintained with the governance `threat-model` skill (STRIDE).
+
+## System context
+
+<!-- fill: what the system does, its users, and its external dependencies, in a few lines. -->
+
+```mermaid
+flowchart LR
+  user[User] -->|HTTPS| app[Application]
+  app --> db[(Database)]
+```
+
+## Trust boundaries
+
+| ID | Boundary | What crosses it | Authentication | Validation |
+| --- | --- | --- | --- | --- |
+| TB-1 | <!-- fill: internet → API --> | | | |
+
+## Assets
+
+| Asset | Why it matters | Classification |
+| --- | --- | --- |
+
+## Threats
+
+STRIDE: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure, **D**enial of service, **E**levation of privilege.
+
+| ID | STRIDE | Where | Threat | Likelihood | Impact | Mitigation | Status | Test or evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T-1 | | TB-1 | <!-- fill --> | | | | open | |
+
+## Assumptions and accepted risks
+
+<!-- fill: what this model takes for granted, and each accepted risk with who accepted it and when. -->

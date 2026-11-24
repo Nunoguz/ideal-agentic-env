@@ -1,0 +1,16 @@
+{
+  "name": "stack-node",
+  "version": "1.0.0",
+  "description": "TypeScript/JavaScript backend: Node, NestJS, Fastify rules, scaffolding and testing.",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "stack",
+    "node",
+    "typescript",
+    "fastify",
+    "nestjs"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "$comment": "Stack contract (ADR-0006). Applied add-only by /design:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "ui": {
+      "detect": { "dependencies": ["react", "next", "vue", "nuxt", "svelte", "@sveltejs/kit", "solid-js", "@angular/core"], "notDependencies": ["react-native", "expo"] },
+      "paths": ["**/*.{tsx,jsx,vue,svelte,css,scss}"],
+      "rules": ["ui.md"]
+    }
+  },
+  "verify": {
+    "fast": [{ "name": "token-lint", "run": "node .github/scripts/token-lint.mjs" }]
+  },
+  "config": {
+    "design": {
+      "tokenFiles": ["**/tokens.{css,scss,ts,js,json}", "**/design-tokens.*", "DESIGN.md"],
+      "uiGlobs": ["**/*.{tsx,jsx,vue,svelte,css,scss}"]
+    }
+  },
+  "ci": {
+    "after": [{ "file": "ci/ui-verify-artifacts.yml", "when": { "dependencies": ["@playwright/test"] } }]
+  },
+  "templates": true
+}

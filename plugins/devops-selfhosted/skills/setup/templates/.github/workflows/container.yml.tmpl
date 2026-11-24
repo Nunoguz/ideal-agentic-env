@@ -1,0 +1,91 @@
+name: container
+
+# Law layer for container images and deployment files (ideal-agentic-env/devops-selfhosted). Builds every image
+# and scans it with Trivy, and scans Dockerfiles, Compose files, Kubernetes manifests and Helm charts for
+# misconfigurations (ADR-0011). Runs on pull requests that touch them, on the default branch and weekly, so new
+# advisories for unchanged base images are found too. Trivy is pinned by version and sha256.
+on:
+  pull_request:
+    paths:
+      - "**/Dockerfile"
+      - "**/*.Dockerfile"
+      - "**/Containerfile"
+      - "**/.dockerignore"
+      - "**/compose*.y*ml"
+      - "**/docker-compose*.y*ml"
+      - "k8s/**"
+      - "kubernetes/**"
+      - "deploy/**"
+      - "charts/**"
+      - ".trivyignore"
+      - ".github/workflows/container.yml"
+      - ".github/scripts/container-scan.mjs"
+  push:
+    branches: [{{DEFAULT_BRANCH}}]
+  schedule:
+    - cron: "41 4 * * 1" # weekly: new advisories for base images that did not change
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_VERSION: "0.76.2"
+  TRIVY_SHA256: "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf"
+
+jobs:
+  scan:
+    name: images and deployment files
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install pinned Trivy (sha256-verified)
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/trivy.tar.gz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "$TRIVY_SHA256  $RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$bin" trivy
+          echo "$bin" >> "$GITHUB_PATH"
+      - run: node .github/scripts/container-scan.mjs
+
+  # Scheduled runs keep one open "[vulnerability-report]" issue for the findings that do not block (for example
+  # base image vulnerabilities without a fix yet). Only this job may write issues.
+  report:
+    name: track non-blocking image findings
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install pinned Trivy (sha256-verified)
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/trivy.tar.gz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "$TRIVY_SHA256  $RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$bin" trivy
+          echo "$bin" >> "$GITHUB_PATH"
+      - run: node .github/scripts/container-scan.mjs --report-issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

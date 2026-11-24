@@ -1,0 +1,30 @@
+# Managed by governance 0.2.0 (ideal-agentic-env). /governance:setup --refresh updates this file while it is unedited; edit it and setup leaves it alone. sha256:c720c50296589aae
+name: compliance
+
+# Law layer (ideal-agentic-env/governance): personal-data inventory gate and compliance report.
+# Re-runs when the PR description changes, because ticking the inventory checkbox is an attestation.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compliance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: data inventory gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: node .github/scripts/compliance-gate.mjs

@@ -1,0 +1,37 @@
+# Incident response runbook
+
+> Owner: <!-- fill --> · Last exercised: <!-- fill: YYYY-MM-DD --> · Maintained with the governance `incident-response` skill.
+
+## Contacts
+
+| Role | Name | How to reach them |
+| --- | --- | --- |
+| Incident lead | <!-- fill --> | |
+| DPO (KVKK irtibat kişisi) | <!-- fill --> | |
+| Legal | <!-- fill --> | |
+| Hosting and processors | <!-- fill: support channel per processor --> | |
+
+## Severity
+
+| Level | Meaning | Examples | Response |
+| --- | --- | --- | --- |
+| SEV-1 | Personal data breach, or a full outage | data exposed, credentials leaked | immediately, around the clock |
+| SEV-2 | Major degradation or a contained security event | | same business day |
+| SEV-3 | Minor | | next business day |
+
+## Steps
+
+1. **Detect and declare.** Open an incident record (time, reporter, first observation). Name an incident lead.
+2. **Contain.** Revoke and rotate exposed credentials. Isolate affected systems. Preserve evidence: logs, snapshots and timelines are never deleted (ISO 27001 A.5.28).
+3. **Assess.** Is personal data affected? Which categories, which people, how many? Is it special-category data?
+4. **Notify,** when personal data is breached:
+   - KVKK: notify the Personal Data Protection Board (Kişisel Verileri Koruma Kurulu) within 72 hours of learning of the breach, and the affected people as soon as reasonably possible.
+   - GDPR: notify the supervisory authority within 72 hours. Notify data subjects without undue delay when the risk to them is high.
+   - Legal and the DPO decide on and send every notification. Engineering supplies the facts.
+5. **Eradicate and recover.** Fix the cause, restore from known-good state, and watch for recurrence.
+6. **Review.** Hold a blameless post-incident review within five business days. Record follow-ups as issues, and guardrails as tests or CI checks.
+
+## Incident record
+
+| Time (UTC) | Event | By |
+| --- | --- | --- |

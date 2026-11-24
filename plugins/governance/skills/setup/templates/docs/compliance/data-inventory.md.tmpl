@@ -1,0 +1,37 @@
+# Personal data inventory (kişisel veri envanteri)
+
+> Owner: <!-- fill: DPO or responsible person --> · Last reviewed: <!-- fill: YYYY-MM-DD -->
+> Maintained with the governance `data-inventory` skill. The CI compliance gate fails a pull request
+> that adds personal-data fields to the schema without updating this file or attesting why not.
+
+This is the engineering source for the VERBİS registration (KVKK) and the record of processing
+activities (GDPR Art. 30). Legal bases and retention periods proposed by engineering stay marked
+**to confirm** until the DPO confirms them. Write field names only, never real personal data.
+
+## Processing activities
+
+<!-- One section per purpose. Copy the block below. -->
+
+### PA-1: <!-- fill: e.g. Customer account management -->
+
+- **Purpose (işleme amacı):** <!-- fill -->
+- **Data subject groups (ilgili kişi grupları):** <!-- fill: customers, employees, visitors ... -->
+- **Data categories (veri kategorileri):** <!-- fill: identity, contact, financial, location, online identifier ... -->
+- **Special categories (özel nitelikli veri, KVKK Art. 6 / GDPR Art. 9):** none
+- **Legal basis (hukuki sebep):** <!-- fill: e.g. KVKK Art. 5(2)(c) performance of a contract — to confirm -->
+- **Retention (saklama süresi):** <!-- fill: link a row in retention-policy.md, e.g. R-1 -->
+- **Recipients and processors (aktarılan alıcı grupları):** <!-- fill: hosting, e-mail provider, payment provider ... -->
+- **Cross-border transfer (yurt dışına aktarım, KVKK Art. 9):** <!-- fill: none, or country + mechanism -->
+- **Technical and organisational measures (idari ve teknik tedbirler):** <!-- fill: encryption at rest, access control, logging ... -->
+- **Systems:** <!-- fill: services, databases, third-party tools -->
+
+## Data elements
+
+| Element (table.column / field) | Category | Special | Activity | Source | Protection | Retention |
+| --- | --- | --- | --- | --- | --- | --- |
+| <!-- fill: users.email --> | contact | no | PA-1 | data subject | encrypted at rest | R-1 |
+
+## Change log
+
+| Date | Change | Pull request |
+| --- | --- | --- |

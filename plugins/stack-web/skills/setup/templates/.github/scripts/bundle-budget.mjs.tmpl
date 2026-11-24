@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+// Bundle budget (ideal-agentic-env/stack-web). Runs in `verify --full` after the production build and fails
+// when the gzipped client JavaScript exceeds the budget in .claude/ideal-agentic-env.json:
+//
+//   "web": { "budget": { "largestChunkKb": 200, "totalJsKb": 600, "dirs": ["apps/web/.next/static"] } }
+//
+// `dirs` is optional; without it the script finds the usual build outputs (.next/static, dist/assets,
+// build/static/js, .output/public/_nuxt). This is a coarse guard against regressions, not a substitute for
+// measuring Core Web Vitals. Raising the budget is a reviewed change to a protected file. Zero dependencies.
+//
+//   node .github/scripts/bundle-budget.mjs [--json]
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
+
+const SKIP = new Set(["node_modules", ".git", "coverage", ".turbo", "cache"]);
+const OUTPUTS = [".next/static", "dist/assets", "build/static/js", ".output/public/_nuxt"];
+export const DEFAULT_BUDGET = { largestChunkKb: 200, totalJsKb: 600 };
+
+export function loadBudget(root) {
+  let cfg = {};
+  try {
+    cfg = JSON.parse(readFileSync(join(root, ".claude", "ideal-agentic-env.json"), "utf8"));
+  } catch {
+    cfg = {};
+  }
+  const b = cfg.web?.budget ?? {};
+  const num = (v, d) => (typeof v === "number" && v > 0 ? v : d);
+  return {
+    largestChunkKb: num(b.largestChunkKb, DEFAULT_BUDGET.largestChunkKb),
+    totalJsKb: num(b.totalJsKb, DEFAULT_BUDGET.totalJsKb),
+    dirs: Array.isArray(b.dirs) ? b.dirs.filter((d) => typeof d === "string") : null,
+  };
+}
+
+/** Build output directories below root (POSIX, relative), up to a few levels deep (monorepos). */
+export function findOutputs(root, depth = 4) {
+  const found = [];
+  const visit = (rel, d) => {
+    for (const out of OUTPUTS) if (existsSync(join(root, rel, out))) found.push(rel ? `${rel}/${out}` : out);
+    if (d >= depth) return;
+    let entries;
+    try {
+      entries = readdirSync(join(root, rel), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith(".")) visit(rel ? `${rel}/${e.name}` : e.name, d + 1);
+  };
+  visit("", 0);
+  return [...new Set(found)].sort();
+}
+
+function jsFiles(dir) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...jsFiles(p));
+    else if (/\.(m?js)$/.test(e.name) && !e.name.endsWith(".map")) out.push(p);
+  }
+  return out;
+}
+
+const kb = (bytes) => Math.round((bytes / 1024) * 10) / 10;
+
+export function measure(root, dir) {
+  const files = jsFiles(join(root, dir)).map((p) => ({ file: p.slice(root.length + 1).replace(/\\/g, "/"), gzip: gzipSync(readFileSync(p)).length }));
+  files.sort((a, b) => b.gzip - a.gzip);
+  return { dir, files: files.length, totalKb: kb(files.reduce((s, f) => s + f.gzip, 0)), largest: files[0] ? { file: files[0].file, kb: kb(files[0].gzip) } : null };
+}
+
+export function run(root) {
+  const budget = loadBudget(root);
+  const dirs = budget.dirs ?? findOutputs(root);
+  const lines = [];
+  if (!dirs.length) return { code: 1, lines: ["bundle-budget: no build output found. Run the production build first, or set web.budget.dirs."] };
+  let failed = false;
+  for (const dir of dirs) {
+    if (!existsSync(join(root, dir)) || !statSync(join(root, dir)).isDirectory()) {
+      lines.push(`error   ${dir}: configured in web.budget.dirs but missing; run the build first`);
+      failed = true;
+      continue;
+    }
+    const m = measure(root, dir);
+    const overTotal = m.totalKb > budget.totalJsKb;
+    const overChunk = m.largest && m.largest.kb > budget.largestChunkKb;
+    failed ||= overTotal || overChunk;
+    lines.push(`${overTotal || overChunk ? "error  " : "ok     "} ${dir}: ${m.files} JS file(s), ${m.totalKb} KB gzip total (budget ${budget.totalJsKb}), largest ${m.largest ? `${m.largest.kb} KB ${m.largest.file}` : "-"} (budget ${budget.largestChunkKb})`);
+  }
+  if (failed) lines.push("Over budget: find what grew (a new dependency, an eager import) before raising web.budget in .claude/ideal-agentic-env.json.");
+  return { code: failed ? 1 : 0, lines };
+}
+
+const isMain = (() => {
+  try {
+    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (isMain) {
+  const result = run(process.cwd());
+  if (process.argv.includes("--json")) console.log(JSON.stringify(result, null, 2));
+  else for (const l of result.lines) console.log(l);
+  process.exit(result.code);
+}

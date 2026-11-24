@@ -1,0 +1,33 @@
+# Application audit logging
+
+> Owner: <!-- fill --> · Maintained with the governance `audit-logging` skill.
+> This is the product's own audit log. Claude Code's agent trail (`.claude/audit/`) is separate.
+
+## Record format
+
+Every event records:
+- **who:** actor id, actor type, tenant
+- **what:** event name, target type, target id
+- **when:** UTC timestamp from a synchronised clock
+- **where:** service, request id, source IP if policy allows
+- **outcome:** success or failure, with the reason code
+
+For sensitive changes, record which fields changed, not their values. Identifiers only: never
+passwords, tokens or personal data values.
+
+## Event catalogue
+
+| Event | Trigger | Target | Extra fields | Retention | Test |
+| --- | --- | --- | --- | --- | --- |
+| `auth.login.succeeded` / `auth.login.failed` | sign-in | user | method, reason code | <!-- fill --> | <!-- fill --> |
+| `access.role.changed` | role or permission change | user | old role, new role | | |
+| `data.export.requested` | bulk export or download of personal data | dataset | row count | | |
+| `admin.action` | any back-office action on customer data | record | action | | |
+| <!-- fill --> | | | | | |
+
+## Storage and protection
+
+- **Store:** <!-- fill: append-only table or stream, separate from application data -->
+- **Integrity:** <!-- fill: append-only permissions, hash chain or WORM storage -->
+- **Access:** <!-- fill: who can read it; reading it is itself audited -->
+- **Retention:** <!-- fill: link retention-policy.md -->

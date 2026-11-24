@@ -1,0 +1,29 @@
+# Retention and destruction policy (kişisel veri saklama ve imha politikası)
+
+> Owner: <!-- fill --> · Last reviewed: <!-- fill: YYYY-MM-DD --> · Maintained with the governance `retention-and-erasure` skill.
+> Periods and legal reasons proposed by engineering stay marked **to confirm** until legal confirms them.
+
+## Retention schedule
+
+| ID | Data / record | Retention period | Legal or business reason | Starts when | Destruction method | Stores |
+| --- | --- | --- | --- | --- | --- | --- |
+| R-1 | <!-- fill: customer account data --> | <!-- fill --> | <!-- fill — to confirm --> | <!-- fill: account closed --> | <!-- fill: hard delete / anonymise --> | <!-- fill: primary DB, replicas, backups, search index --> |
+
+## Periodic destruction (periyodik imha)
+
+- **Interval:** <!-- fill: the KVKK destruction regulation allows at most six months between runs -->
+- **Mechanism:** <!-- fill: scheduled job, its code location and its test -->
+- **Record:** every run writes a destruction record: what, how many, which method, when and by which process. The KVKK regulation requires keeping these records for at least three years.
+
+## Erasure requests from data subjects
+
+- **Channel and deadline:** <!-- fill: KVKK Art. 13 sets 30 days to answer an application -->
+- **Stores covered:** primary database, replicas, caches, search indexes, object storage, analytics, logs, backups, and every processor in the data inventory.
+- **Backups:** <!-- fill: they expire within N days, or keys are destroyed (crypto-shredding) -->
+
+## Methods
+
+- **Deletion (silme):** the data can no longer be accessed or reused by any user.
+- **Destruction (yok etme):** the data can never again be accessed, recovered or reused by anyone.
+- **Anonymisation (anonim hale getirme):** the data can no longer be linked to a person, even when combined with other data. Pseudonymisation is not anonymisation.
+- A soft delete (`deleted_at`) is none of the above. It only hides the data.

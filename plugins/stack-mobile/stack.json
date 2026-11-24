@@ -1,0 +1,47 @@
+{
+  "$comment": "Stack contract (ADR-0006, ADR-0010). Applied add-only by /stack-mobile:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "react-native": {
+      "detect": { "dependencies": ["react-native"] },
+      "paths": ["**/*.{ts,tsx,js,jsx}"],
+      "rules": ["react-native.md"]
+    },
+    "expo": {
+      "detect": { "dependencies": ["expo"] },
+      "paths": ["**/*.{ts,tsx}", "app.json", "app.config.*", "eas.json"],
+      "rules": ["expo.md"]
+    },
+    "npm": {
+      "scope": "repo",
+      "companion": true,
+      "detect": { "files": ["package.json"] },
+      "paths": ["**/package.json", "**/.npmrc"],
+      "rules": ["npm-dependencies.md"]
+    }
+  },
+  "format": [
+    { "glob": "**/*.{ts,tsx,js,jsx,json}", "run": "npx --no-install prettier --write --log-level warn {file}", "when": { "dependencies": ["prettier"] } },
+    { "glob": "**/*.{ts,tsx,js,jsx,json}", "run": "npx --no-install biome format --write {file}", "when": { "dependencies": ["@biomejs/biome"] } }
+  ],
+  "formatHint": "add prettier (or @biomejs/biome) as a devDependency and re-run setup",
+  "verify": {
+    "fast": [
+      { "name": "typecheck", "script": "typecheck", "recommended": "tsc --noEmit in the app" },
+      { "name": "lint", "script": "lint", "recommended": "expo lint (eslint-config-expo) plus eslint-plugin-react-native-a11y" },
+      { "name": "test:unit", "script": "test:unit" }
+    ],
+    "full": [
+      { "name": "test", "script": "test", "recommended": "jest-expo with @testing-library/react-native" },
+      { "name": "expo:check", "script": "expo:check", "recommended": "EXPO_OFFLINE=1 npx expo install --check in the Expo app (versions match the installed SDK; online it demands the newest patch and breaks the 14-day cooldown)" },
+      { "name": "expo:export", "script": "expo:export", "recommended": "npx expo export --platform ios --platform android --output-dir .expo-export (both bundles, no native build)" }
+    ]
+  },
+  "hints": [
+    {
+      "when": { "dependencies": ["expo"], "notDependencies": ["expo-secure-store", "react-native-keychain"] },
+      "note": "no secure storage library (expo-secure-store): tokens must not live in AsyncStorage; add it with npx expo install expo-secure-store when the app stores a session"
+    }
+  ],
+  "dependabot": { "ecosystem": "npm", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+  "lsp": { "binary": "typescript-language-server", "install": "npm install -g typescript-language-server typescript" }
+}

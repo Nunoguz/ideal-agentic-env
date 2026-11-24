@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+// Compliance gate (ideal-agentic-env/governance). This is the Law layer for the personal-data inventory.
+//
+// A pull request fails when all three of these hold:
+//   1. It adds lines with personal-data-looking fields to schema files (migrations, models, entities,
+//      schemas, contracts).
+//   2. The data inventory is unchanged.
+//   3. The author has not attested that no update is needed. To attest, tick a PR description
+//      checkbox that mentions the "inventory", or add the line "Inventory: not needed — <reason>".
+// Either way it writes a compliance report to the job summary.
+//
+// In CI it reads the pull_request event. Locally:
+//   node .github/scripts/compliance-gate.mjs --base origin/main --head HEAD [--body-file pr.md]
+import { spawnSync } from "node:child_process";
+import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// ---- personal-data rules: embedded from governance hooks/lib/pii-rules.mjs by governance:setup ----
+{{PII_RULES}}
+// ---- end of embedded rules ----
+
+const MAX_REPORTED = 50;
+
+function git(args) {
+  const r = spawnSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.trim()}`);
+  return r.stdout;
+}
+
+/** Added lines per file from `git diff -U0` output: Map<path, [{ line, text }]>. */
+export function parseDiff(text) {
+  const files = new Map();
+  let current = null;
+  let line = 0;
+  for (const raw of text.split("\n")) {
+    if (raw.startsWith("+++ ")) {
+      const path = raw.slice(4).replace(/^b\//, "");
+      current = path === "/dev/null" ? null : path;
+      if (current && !files.has(current)) files.set(current, []);
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+    if (hunk) {
+      line = Number(hunk[1]);
+      continue;
+    }
+    if (current && raw.startsWith("+")) files.get(current).push({ line: line++, text: raw.slice(1) });
+  }
+  return files;
+}
+
+export function attested(body) {
+  const text = String(body ?? "");
+  return /^\s*[-*]\s*\[[xX]\][^\n]*\b(inventory|envanter)/im.test(text) || /^\s*(inventory|envanter)\s*:\s*(not needed|gerekmiyor)/im.test(text);
+}
+
+/** Findings and verdict for one pull request. `added` is the parseDiff() result. */
+export function evaluate({ changed, added, body, cfg }) {
+  const schemaFiles = changed.filter((f) => isSchemaPath(f, cfg.schemaPaths));
+  const findings = [];
+  for (const file of schemaFiles) {
+    for (const { line, text } of added.get(file) ?? []) {
+      const found = findPersonalData(text, cfg.piiTerms);
+      if (found.length) findings.push({ file, line, found });
+    }
+  }
+  const inventoryChanged = changed.includes(cfg.inventoryPath);
+  const isAttested = attested(body);
+  const pass = !findings.length || inventoryChanged || isAttested;
+  return { changed, schemaFiles, findings, inventoryChanged, attested: isAttested, pass, inventoryPath: cfg.inventoryPath };
+}
+
+export function renderReport(r) {
+  const special = [...new Set(r.findings.flatMap((f) => f.found.filter((x) => x.special).map((x) => x.label)))];
+  const fields = r.findings
+    .slice(0, MAX_REPORTED)
+    .map((f) => `\`${f.file}:${f.line}\` ${describe(f.found)}`)
+    .join("<br>");
+  const more = r.findings.length > MAX_REPORTED ? ` (+${r.findings.length - MAX_REPORTED} more)` : "";
+  const verdict = r.pass
+    ? "✅ pass"
+    : `❌ fail: personal-data fields were added but \`${r.inventoryPath}\` is unchanged and there is no attestation`;
+  return [
+    "## Compliance report",
+    "",
+    "| Check | Result |",
+    "| --- | --- |",
+    `| Changed files | ${r.changed.length} |`,
+    `| Schema files changed | ${r.schemaFiles.length ? r.schemaFiles.map((f) => `\`${f}\``).join(", ") : "none"} |`,
+    `| Personal-data-looking fields added | ${fields ? fields + more : "none"} |`,
+    `| Special-category data (KVKK Art. 6 / GDPR Art. 9) | ${special.length ? special.join(", ") : "none"} |`,
+    `| Data inventory updated | ${r.inventoryChanged ? "yes" : "no"} |`,
+    `| Author attestation | ${r.attested ? "yes" : "no"} |`,
+    `| Result | ${verdict} |`,
+    "",
+    r.pass
+      ? ""
+      : `Update \`${r.inventoryPath}\` (governance \`data-inventory\` skill), or, if no inventory change is needed, tick the data-inventory checkbox in the PR description or add \`Inventory: not needed — <reason>\`.`,
+  ].join("\n");
+}
+
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function inputs(argv) {
+  const arg = (name) => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  if (arg("--base")) {
+    const bodyFile = arg("--body-file");
+    return { base: arg("--base"), head: arg("--head") ?? "HEAD", body: bodyFile ? readFileSync(bodyFile, "utf8") : "" };
+  }
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  const pr = eventPath && existsSync(eventPath) ? readJson(eventPath)?.pull_request : null;
+  if (!pr) throw new Error("not a pull_request event; pass --base <ref> [--head <ref>] to run locally");
+  return { base: pr.base.sha, head: pr.head.sha, body: pr.body ?? "" };
+}
+
+const isMain = Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (isMain) {
+  try {
+    const { base, head, body } = inputs(process.argv.slice(2));
+    const range = `${base}...${head}`;
+    const changed = git(["diff", "--name-only", "--no-renames", range]).split("\n").filter(Boolean);
+    const added = parseDiff(git(["diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMR", range]));
+    const cfg = governanceConfig(readJson(".claude/ideal-agentic-env.json"));
+    const result = evaluate({ changed, added, body, cfg });
+    const report = renderReport(result);
+    console.log(report);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);
+    if (!result.pass) {
+      for (const f of result.findings.slice(0, 20))
+        console.log(`::error file=${f.file},line=${f.line}::Personal-data-looking field (${describe(f.found)}) without a data inventory update or attestation`);
+      process.exit(1);
+    }
+  } catch (err) {
+    console.error(`compliance-gate: ${err.message}`);
+    process.exit(2);
+  }
+}

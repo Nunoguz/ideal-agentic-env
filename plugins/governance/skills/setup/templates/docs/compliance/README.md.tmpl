@@ -1,0 +1,20 @@
+# Compliance records
+
+The engineering side of KVKK/GDPR, SOC 2 and ISO 27001 compliance. The governance plugin's skills keep
+these records current, and CI enforces the parts that must never break. Certification and legal
+decisions remain with people: the DPO (veri sorumlusu irtibat kişisi), the auditor and management.
+
+| Record | Maintained with | Owner | Review |
+| --- | --- | --- | --- |
+| [data-inventory.md](data-inventory.md): personal data, purposes, legal bases (VERBİS / GDPR Art. 30) | `data-inventory` skill, CI compliance gate | <!-- fill --> | every change that adds personal data; yearly |
+| [retention-policy.md](retention-policy.md): retention and destruction (saklama ve imha politikası) | `retention-and-erasure` skill | <!-- fill --> | yearly |
+| [access-matrix.md](access-matrix.md): roles, permissions, access reviews | `access-matrix` skill | <!-- fill --> | quarterly access review |
+| [control-map.md](control-map.md): SOC 2 / ISO 27001 controls and their evidence | `control-map` skill | <!-- fill --> | before each audit period |
+| [dpia/](dpia/README.md): impact assessments for high-risk processing | `dpia` skill | <!-- fill --> | per assessment |
+| [../security/threat-model.md](../security/threat-model.md): STRIDE threat model | `threat-model` skill | <!-- fill --> | every change to a trust boundary |
+| [../security/audit-logging.md](../security/audit-logging.md): application audit events | `audit-logging` skill | <!-- fill --> | with every new sensitive action |
+| [../security/incident-response.md](../security/incident-response.md): incident and breach runbook | `incident-response` skill | <!-- fill --> | yearly exercise |
+
+Rules for every record:
+- Field names, identifiers and categories only. Never real personal data, secrets or customer names.
+- Each change goes through a pull request, so the git history is the audit trail.

@@ -1,0 +1,38 @@
+{
+  "$comment": "Stack contract (ADR-0006, ADR-0010). Applied add-only by /devops-selfhosted:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "docker": {
+      "scope": "repo",
+      "detect": { "files": ["**/Dockerfile", "**/*.Dockerfile", "**/Containerfile"] },
+      "paths": ["**/Dockerfile", "**/*.Dockerfile", "**/Containerfile", "**/.dockerignore"],
+      "rules": ["dockerfile.md"]
+    },
+    "compose": {
+      "scope": "repo",
+      "detect": { "files": ["**/compose.y*ml", "**/compose.*.y*ml", "**/docker-compose*.y*ml"] },
+      "paths": ["**/compose*.y*ml", "**/docker-compose*.y*ml", "**/.env.example"],
+      "rules": ["compose.md"]
+    },
+    "kubernetes": {
+      "scope": "repo",
+      "detect": { "files": ["k8s/**", "kubernetes/**", "deploy/**/*.y*ml", "charts/**/Chart.yaml", "**/kustomization.y*ml"] },
+      "paths": ["k8s/**", "kubernetes/**", "deploy/**", "charts/**", "**/kustomization.y*ml"],
+      "rules": ["kubernetes.md"]
+    }
+  },
+  "config": {
+    "guardedCommands": [
+      { "pattern": "^docker (image )?push\\b", "decision": "ask", "reason": "publishing a container image" },
+      { "pattern": "^sops (.* )?(-d|--decrypt|decrypt)\\b", "decision": "ask", "reason": "decrypting secrets prints them into the session" },
+      { "pattern": "^kubectl .*\\b(get|describe)\\s+secrets?\\b", "decision": "ask", "reason": "reading Kubernetes secrets prints their values" },
+      { "pattern": "^kubectl .*\\b(apply|create|replace|patch|scale|set|rollout\\s+(undo|restart))\\b", "decision": "ask", "reason": "changing a Kubernetes cluster is a deploy" },
+      { "pattern": "^helm (install|upgrade|rollback)\\b", "decision": "ask", "reason": "deploying with Helm" },
+      { "pattern": "^(ssh|scp)\\s", "decision": "ask", "reason": "a command on a remote server" },
+      { "pattern": "^rsync\\s.*\\S+:", "decision": "ask", "reason": "copying to a remote server" },
+      { "pattern": "^pg_restore\\s.*(--clean|-c\\b)", "decision": "ask", "reason": "pg_restore --clean drops objects before restoring" },
+      { "pattern": "^restic\\s.*\\b(forget|prune)\\b", "decision": "ask", "reason": "deleting backup snapshots" }
+    ]
+  },
+  "dependabot": { "ecosystem": "docker", "lockfiles": ["Dockerfile"] },
+  "templates": true
+}

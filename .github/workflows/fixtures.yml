@@ -1,0 +1,98 @@
+name: fixtures
+
+# Proof that the stack contracts work on a real project: each fixture runs core:init, governance:setup and its
+# stack setups from this branch, checks that a second run changes nothing, then runs verify --full
+# (scripts/fixture-run.mjs). Linux only, and only when plugins, shared code or fixtures change (ADR-0005 minutes).
+# The sample repositories prove the rest (Vue + Vite, .NET + PostgreSQL, Expo, devops).
+# spring-postgres runs its integration tests with Testcontainers on the runner's Docker.
+on:
+  pull_request:
+    paths: ["plugins/**", "shared/**", "fixtures/**", "scripts/fixture-run.mjs", ".github/workflows/fixtures.yml"]
+  push:
+    branches: [main]
+    paths: ["plugins/**", "shared/**", "fixtures/**", "scripts/fixture-run.mjs", ".github/workflows/fixtures.yml"]
+  schedule:
+    - cron: "29 5 * * 1" # weekly, Monday 05:29 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fixtures-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nuxt:
+    name: fixture nuxt (stack-web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: node scripts/fixture-run.mjs nuxt
+
+  dotnet-sqlserver:
+    name: fixture dotnet-sqlserver (stack-dotnet, data-sql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # The same image and digest as plugins/data-sql/ci/sqlserver.yml.
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2025-CU9-GDR1-ubuntu-24.04@sha256:742481d1b1186cccc81220a1eaacef244ca8d0f7d19c8e5c70df8ae541ffbab2
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-Pw!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ConnectionStrings__Default: Server=127.0.0.1,1433;Database=fixture;User Id=sa;Password=Ci-${{ github.run_id }}-Pw!;TrustServerCertificate=true
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: fixtures/dotnet-sqlserver/global.json
+      - run: node scripts/fixture-run.mjs dotnet-sqlserver
+
+  spring-postgres:
+    name: fixture spring-postgres (stack-java-spring, data-sql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # The same scanner as security.yml: the fixture also runs governance's dependency gate on the Maven tree.
+      OSV_SCANNER_VERSION: "2.7.1"
+      OSV_SCANNER_SHA256: "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: fixtures/spring-postgres/pom.xml
+      - name: Install pinned osv-scanner (sha256-verified)
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/osv-scanner" | sha256sum -c -
+          install -m 0755 "$RUNNER_TEMP/osv-scanner" "$bin/osv-scanner"
+          echo "$bin" >> "$GITHUB_PATH"
+      - run: node scripts/fixture-run.mjs spring-postgres

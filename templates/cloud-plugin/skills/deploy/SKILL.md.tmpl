@@ -1,0 +1,10 @@
+---
+name: deploy
+description: Deploy to {{PROVIDER}} with a written plan, migrations first, a zero-downtime rollout, a smoke test and a rollback, with the user approving every step that touches the cloud account. Use only when the user runs /{{NAME}}:deploy or explicitly asks to deploy to {{PROVIDER}}.
+disable-model-invocation: true
+---
+
+# Deploy to {{PROVIDER}}
+
+<!-- Fill in: the services this plugin deploys to, preflight checks (green default branch, image digest, backup),
+     the rollout and rollback commands, and the smoke test. Every command that changes the account needs the user's yes. -->

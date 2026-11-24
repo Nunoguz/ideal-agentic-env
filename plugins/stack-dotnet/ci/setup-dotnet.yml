@@ -1,0 +1,7 @@
+# The current LTS SDK band, with the NuGet cache keyed on the lockfiles (stack-dotnet). Add a global.json
+# to pin the SDK, then re-run /stack-dotnet:setup --refresh.
+- uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+  with:
+    dotnet-version: "10.0.x"
+    cache: true
+    cache-dependency-path: "**/packages.lock.json"

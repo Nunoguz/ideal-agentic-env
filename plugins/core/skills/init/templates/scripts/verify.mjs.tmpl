@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+// Single verification entry point for humans, Claude and CI (ideal-agentic-env/core).
+// Steps are configured in .claude/ideal-agentic-env.json:
+//   "verify": { "fast": [{ "name": "lint", "run": "npm run lint" }], "full": [{ "name": "test", "run": "npm test" }] }
+// --fast runs the fast steps; --full runs fast + full steps. Stops at the first failure.
+// "run" may be a string or { "posix": "...", "win32": "..." } for platform-specific commands.
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const mode = process.argv.includes("--full") ? "full" : "fast";
+const configPath = join(root, ".claude", "ideal-agentic-env.json");
+
+let verify = {};
+if (existsSync(configPath)) {
+  try {
+    verify = JSON.parse(readFileSync(configPath, "utf8")).verify ?? {};
+  } catch (err) {
+    console.error(`verify: cannot parse ${configPath}: ${err.message}`);
+    process.exit(2);
+  }
+}
+
+const platform = process.platform === "win32" ? "win32" : "posix";
+const commandOf = (s) => (typeof s?.run === "string" ? s.run : s?.run?.[platform]);
+const steps = [...(verify.fast ?? []), ...(mode === "full" ? verify.full ?? [] : [])]
+  .filter((s) => s && typeof s.name === "string" && typeof commandOf(s) === "string")
+  .map((s) => ({ name: s.name, run: commandOf(s) }));
+
+if (!steps.length) {
+  console.warn(`verify: NO CHECKS CONFIGURED for --${mode}. Add steps under "verify" in .claude/ideal-agentic-env.json.`);
+  process.exit(0);
+}
+
+const results = [];
+for (const step of steps) {
+  console.log(`\n▶ ${step.name}: ${step.run}`);
+  const started = Date.now();
+  const r = spawnSync(step.run, { cwd: root, shell: true, stdio: "inherit", windowsHide: true }); // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true -- steps are shell commands from the protected, CODEOWNERS-owned project config
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  const ok = r.status === 0;
+  results.push({ name: step.name, ok, seconds });
+  if (!ok) break;
+}
+
+console.log(`\nverify --${mode}`);
+for (const r of results) console.log(`  ${r.ok ? "✓" : "✗"} ${r.name} (${r.seconds}s)`);
+const skipped = steps.length - results.length;
+if (skipped) console.log(`  … ${skipped} step(s) not run`);
+process.exit(results.every((r) => r.ok) ? 0 : 1);

@@ -1,0 +1,9 @@
+# gitleaks config for this repository (governance security workflow). Default rules stay on.
+[extend]
+useDefault = true
+
+# The core secret-scanner tests must contain secret-shaped strings to prove the scanner catches them.
+# They are synthetic. This exception covers that one file only; every other path is scanned in full.
+[[allowlists]]
+description = "Synthetic secrets in the core secret-scanner tests"
+paths = ['''^plugins/core/hooks/test/secret-rules\.test\.mjs$''']

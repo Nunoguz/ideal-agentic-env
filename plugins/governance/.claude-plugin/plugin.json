@@ -1,0 +1,17 @@
+{
+  "name": "governance",
+  "version": "1.0.1",
+  "description": "Mandatory compliance layer: KVKK/GDPR data inventory, threat modeling, audit logging, SOC 2 and ISO 27001 evidence.",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "compliance",
+    "kvkk",
+    "gdpr",
+    "soc2",
+    "iso27001",
+    "security"
+  ]
+}

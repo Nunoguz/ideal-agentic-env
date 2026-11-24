@@ -1,0 +1,316 @@
+{
+  "$comment": "Stack contract (ADR-0006). Applied add-only by /data-sql:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "sql": {
+      "scope": "repo",
+      "detect": [
+        {
+          "dependencies": [
+            "pg",
+            "postgres",
+            "@neondatabase/serverless",
+            "mysql2",
+            "mssql",
+            "tedious",
+            "@prisma/client",
+            "prisma",
+            "drizzle-orm",
+            "typeorm",
+            "knex",
+            "kysely",
+            "sequelize",
+            "@mikro-orm/core",
+            "Npgsql",
+            "Microsoft.Data.SqlClient",
+            "Dapper",
+            "Microsoft.EntityFrameworkCore",
+            "Microsoft.EntityFrameworkCore.SqlServer",
+            "Npgsql.EntityFrameworkCore.PostgreSQL",
+            "Microsoft.EntityFrameworkCore.Sqlite",
+            "Pomelo.EntityFrameworkCore.MySql",
+            "org.flywaydb:flyway-core",
+            "org.springframework.boot:spring-boot-starter-flyway",
+            "org.springframework.boot:spring-boot-starter-jdbc",
+            "org.springframework.boot:spring-boot-starter-data-jdbc",
+            "org.springframework.boot:spring-boot-starter-data-jpa",
+            "org.postgresql:postgresql",
+            "com.microsoft.sqlserver:mssql-jdbc",
+            "com.mysql:mysql-connector-j",
+            "org.mariadb.jdbc:mariadb-java-client"
+          ]
+        },
+        {
+          "files": [
+            "**/*.sql",
+            "**/schema.prisma",
+            "**/alembic.ini",
+            "**/*ModelSnapshot.cs",
+            "**/flyway.conf",
+            "**/flyway.toml"
+          ]
+        }
+      ],
+      "paths": [
+        "**/*.sql",
+        "**/migrations/**",
+        "**/db/migration/**",
+        "**/alembic/versions/**",
+        "**/schema.prisma",
+        "**/drizzle/**",
+        "**/*{schema,repository,repo}*.{ts,js,mjs}",
+        "**/Migrations/**",
+        "**/*{DbContext,Repository}*.cs",
+        "**/*{Repository,Dao,Queries}*.java"
+      ],
+      "rules": [
+        "sql.md",
+        "migrations.md"
+      ]
+    },
+    "postgres": {
+      "scope": "repo",
+      "detect": {
+        "dependencies": [
+          "pg",
+          "postgres",
+          "@neondatabase/serverless",
+          "pg-promise",
+          "Npgsql",
+          "Npgsql.EntityFrameworkCore.PostgreSQL",
+          "org.postgresql:postgresql"
+        ]
+      },
+      "paths": [
+        "**/*.sql",
+        "**/migrations/**",
+        "**/db/migration/**",
+        "**/drizzle/**",
+        "**/Migrations/**"
+      ],
+      "rules": [
+        "postgres.md"
+      ],
+      "config": {
+        "dataSql": {
+          "dialect": "postgres"
+        }
+      }
+    },
+    "mysql": {
+      "scope": "repo",
+      "detect": {
+        "dependencies": [
+          "mysql2",
+          "mysql",
+          "mariadb",
+          "com.mysql:mysql-connector-j",
+          "org.mariadb.jdbc:mariadb-java-client"
+        ]
+      },
+      "paths": [],
+      "rules": [],
+      "config": {
+        "dataSql": {
+          "dialect": "mysql"
+        }
+      }
+    },
+    "sqlserver": {
+      "scope": "repo",
+      "detect": {
+        "dependencies": [
+          "mssql",
+          "tedious",
+          "Microsoft.Data.SqlClient",
+          "Microsoft.EntityFrameworkCore.SqlServer",
+          "com.microsoft.sqlserver:mssql-jdbc"
+        ]
+      },
+      "paths": [
+        "**/*.sql",
+        "**/Migrations/**",
+        "**/*{DbContext,Repository}*.cs",
+        "**/*{Repository,Dao}*.java"
+      ],
+      "rules": [
+        "sqlserver.md"
+      ],
+      "config": {
+        "dataSql": {
+          "dialect": "sqlserver"
+        }
+      }
+    },
+    "drizzle": {
+      "scope": "repo",
+      "detect": {
+        "dependencies": [
+          "drizzle-kit",
+          "drizzle-orm"
+        ]
+      },
+      "paths": [
+        "**/drizzle.config.*",
+        "**/drizzle/**",
+        "**/*schema*.{ts,js}"
+      ],
+      "rules": [
+        "drizzle.md"
+      ],
+      "config": {
+        "migrations": [
+          "**/drizzle/**"
+        ]
+      }
+    },
+    "prisma": {
+      "scope": "repo",
+      "detect": [
+        {
+          "dependencies": [
+            "prisma",
+            "@prisma/client"
+          ]
+        },
+        {
+          "files": [
+            "**/schema.prisma"
+          ]
+        }
+      ],
+      "paths": [
+        "**/schema.prisma",
+        "**/migrations/**"
+      ],
+      "rules": [
+        "prisma.md"
+      ]
+    },
+    "efcore": {
+      "scope": "repo",
+      "detect": [
+        {
+          "dependencies": [
+            "Microsoft.EntityFrameworkCore",
+            "Microsoft.EntityFrameworkCore.SqlServer",
+            "Npgsql.EntityFrameworkCore.PostgreSQL",
+            "Microsoft.EntityFrameworkCore.Sqlite",
+            "Pomelo.EntityFrameworkCore.MySql"
+          ]
+        },
+        {
+          "files": [
+            "**/*ModelSnapshot.cs"
+          ]
+        }
+      ],
+      "paths": [
+        "**/Migrations/**",
+        "**/*{DbContext,Configuration,Repository,Queries}*.cs",
+        "**/{Data,Persistence}/**/*.cs"
+      ],
+      "rules": [
+        "efcore.md"
+      ]
+    },
+    "flyway": {
+      "scope": "repo",
+      "detect": [
+        {
+          "dependencies": [
+            "org.flywaydb:flyway-core",
+            "org.springframework.boot:spring-boot-starter-flyway"
+          ]
+        },
+        {
+          "files": [
+            "**/flyway.conf",
+            "**/flyway.toml"
+          ]
+        }
+      ],
+      "paths": [
+        "**/db/migration/**",
+        "**/flyway.{conf,toml}",
+        "**/application*.{yml,yaml,properties}"
+      ],
+      "rules": [
+        "flyway.md"
+      ]
+    }
+  },
+  "verify": {
+    "fast": [
+      {
+        "name": "migrations",
+        "run": "node .github/scripts/migration-check.mjs"
+      }
+    ]
+  },
+  "templates": true,
+  "ci": {
+    "services": [
+      {
+        "file": "ci/postgres.yml",
+        "when": {
+          "dependencies": [
+            "pg",
+            "postgres",
+            "pg-promise",
+            "Npgsql",
+            "Npgsql.EntityFrameworkCore.PostgreSQL"
+          ]
+        },
+        "note": "PostgreSQL runs as a job service on 127.0.0.1:5432 (user postgres, database app, no password); point the test connection string at it in the job env, for example DATABASE_URL=postgres://postgres@127.0.0.1:5432/app or ConnectionStrings__Default=Host=127.0.0.1;Database=app;Username=postgres"
+      },
+      {
+        "file": "ci/sqlserver.yml",
+        "when": {
+          "dependencies": [
+            "mssql",
+            "tedious",
+            "Microsoft.Data.SqlClient",
+            "Microsoft.EntityFrameworkCore.SqlServer"
+          ]
+        },
+        "note": "SQL Server runs as a job service on 127.0.0.1:1433 (user sa, password Ci-${{ github.run_id }}-Pw!); set the test connection string in the job env with the same expression, for example ConnectionStrings__Default=Server=127.0.0.1,1433;Database=app;User Id=sa;Password=Ci-${{ github.run_id }}-Pw!;TrustServerCertificate=true"
+      }
+    ]
+  },
+  "hints": [
+    {
+      "when": {
+        "dependencies": [
+          "org.postgresql:postgresql",
+          "com.microsoft.sqlserver:mssql-jdbc",
+          "com.mysql:mysql-connector-j",
+          "org.mariadb.jdbc:mariadb-java-client"
+        ],
+        "dependencyPrefixes": [
+          "org.testcontainers:"
+        ]
+      },
+      "note": "JVM integration tests start the database with Testcontainers, so no CI database service is added; CI runners have Docker. Merged Flyway migrations (db/migration/) are already protected by core's defaults"
+    },
+    {
+      "when": {
+        "dependencies": [
+          "org.postgresql:postgresql",
+          "com.microsoft.sqlserver:mssql-jdbc",
+          "com.mysql:mysql-connector-j",
+          "org.mariadb.jdbc:mariadb-java-client"
+        ],
+        "notDependencies": [
+          "org.testcontainers:testcontainers-postgresql",
+          "org.testcontainers:postgresql",
+          "org.testcontainers:testcontainers-mssqlserver",
+          "org.testcontainers:mssqlserver",
+          "org.testcontainers:testcontainers-mysql",
+          "org.testcontainers:mysql",
+          "org.springframework.boot:spring-boot-testcontainers"
+        ]
+      },
+      "note": "a JVM database driver without Testcontainers: integration tests have no database in CI. Add Testcontainers with @ServiceConnection (stack-java-spring testing rules); no CI service is added for JVM drivers"
+    }
+  ]
+}

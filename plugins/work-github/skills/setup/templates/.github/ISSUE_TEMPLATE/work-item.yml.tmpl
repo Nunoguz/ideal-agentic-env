@@ -1,0 +1,52 @@
+name: Work item
+description: A feature, bug, chore or spike in the shared work-item schema (ideal-agentic-env/work-github).
+title: "<type>: <outcome>"
+labels: ["status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Never include personal data, customer names, secrets or production data. Use identifiers and synthetic examples.
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options: [feature, bug, chore, spike]
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why it matters, who is affected, links. For a bug, observed vs expected behaviour and the steps to reproduce.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements, one checkbox each.
+      value: "- [ ] "
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks
+  - type: textarea
+    id: test-plan
+    attributes:
+      label: Test plan
+  - type: checkboxes
+    id: compliance
+    attributes:
+      label: Compliance impact
+      description: Tick what applies. Leave all unticked for none.
+      options:
+        - label: Adds or changes personal data
+        - label: Adds a third party that receives data, or a transfer abroad
+        - label: Changes retention, deletion or access rights
+        - label: Touches authentication, authorization or another security control

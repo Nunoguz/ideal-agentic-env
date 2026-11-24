@@ -1,0 +1,19 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,java,kt,py,swift}]
+indent_size = 4
+
+# EF Core generates migrations (with a byte order mark); they are immutable once merged, so format leaves them alone.
+[**/Migrations/*.cs]
+generated_code = true
+
+[*.md]
+trim_trailing_whitespace = false

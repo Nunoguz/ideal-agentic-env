@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+// Git pre-push hook (ideal-agentic-env/core). Changes reach protected branches only through pull
+// requests. Where the hosting plan has no branch protection, this is the preventive control for
+// humans; the governance change-audit workflow is the detective one.
+//
+// Activate once per clone:   git config core.hooksPath .githooks
+// Emergency bypass:          git push --no-verify   (change-audit still records the push)
+import { readFileSync } from "node:fs";
+
+const PROTECTED = /^refs\/heads\/(main|master|develop|trunk|release[\w./-]*|prod(uction)?)$/i;
+
+let input = "";
+try {
+  input = readFileSync(0, "utf8");
+} catch {
+  input = "";
+}
+
+// Each line: <local ref> <local sha> <remote ref> <remote sha>
+const blocked = input
+  .split(/\r?\n/)
+  .map((line) => line.trim().split(/\s+/))
+  .filter(([, , remoteRef]) => remoteRef && PROTECTED.test(remoteRef))
+  .map(([, , remoteRef]) => remoteRef.replace(/^refs\/heads\//, ""));
+
+if (blocked.length) {
+  console.error(`pre-push: direct push to protected branch ${[...new Set(blocked)].join(", ")} is blocked.`);
+  console.error("Push a feature branch and open a pull request instead.");
+  console.error("Emergency only: git push --no-verify (the change-audit workflow will record it).");
+  process.exit(1);
+}

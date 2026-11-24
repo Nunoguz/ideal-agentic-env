@@ -1,0 +1,377 @@
+#!/usr/bin/env node
+// Migration safety check (ideal-agentic-env/data-sql). Runs as a verify step, so the same command guards
+// Claude's Stop hook, the developer's terminal and CI. Zero dependencies (Node >= 20).
+//
+//   1. Immutability: a migration that exists on the base branch must not be modified, renamed or deleted.
+//      Add a new migration instead. Tool-managed files (migrationsMutable) are exempt.
+//   2. Lint: added or changed migrations must not take long locks or lose data silently. .sql files are
+//      parsed as SQL; EF Core migrations (.cs) are read through their MigrationBuilder calls, and the SQL in
+//      migrationBuilder.Sql("...") goes through the SQL rules. A finding can be accepted for one file with a
+//      reasoned annotation:
+//        -- migration-check: allow <rule-id> <why this is safe here>      (SQL)
+//        // migration-check: allow <rule-id> <why this is safe here>      (C#)
+//
+//   node .github/scripts/migration-check.mjs [--base <ref>] [--all]
+//
+// Base: --base, else origin/$GITHUB_BASE_REF on a pull request, else the merge base with the remote default
+// branch. On a push to the default branch it skips: the pull request already ran it.
+// Settings come from .claude/ideal-agentic-env.json: migrations, migrationsMutable, dataSql.dialect.
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const DEFAULT_MIGRATIONS = ["**/migrations/**", "**/db/migration/**", "**/alembic/versions/**"];
+export const DEFAULT_MUTABLE = ["**/meta/_journal.json", "**/migration_lock.toml", "**/*ModelSnapshot.cs", "**/R__*.sql", "**/__pycache__/**"];
+
+// ---------- globs ----------
+
+function globRe(glob) {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        const slash = glob[i + 2] === "/";
+        re += slash ? "(?:.*/)?" : ".*";
+        i += slash ? 2 : 1;
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`, "i"); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- globs from the protected project config, metacharacters escaped
+}
+const matches = (path, globs) => globs.some((g) => globRe(g).test(path));
+
+// ---------- config and git ----------
+
+export function loadSettings(root) {
+  let cfg = {};
+  try {
+    cfg = JSON.parse(readFileSync(join(root, ".claude", "ideal-agentic-env.json"), "utf8"));
+  } catch {
+    cfg = {};
+  }
+  const list = (key, defaults) => [...new Set([...defaults, ...(Array.isArray(cfg[key]) ? cfg[key].filter((g) => typeof g === "string") : [])])];
+  return {
+    migrations: list("migrations", DEFAULT_MIGRATIONS),
+    mutable: list("migrationsMutable", DEFAULT_MUTABLE),
+    dialect: String(cfg.dataSql?.dialect ?? "postgres").toLowerCase(),
+  };
+}
+
+function git(root, args) {
+  const r = spawnSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+/** The commit to compare against, or { skip: reason }. */
+export function resolveBase(root, { base, env = process.env } = {}) {
+  if (base) return git(root, ["rev-parse", "--verify", "--quiet", `${base}^{commit}`]) ? { ref: base } : { error: `base ${base} not found` };
+  if (env.GITHUB_ACTIONS === "true" && env.GITHUB_EVENT_NAME === "push") return { skip: "push to the default branch; the pull request already ran this check" };
+  if (env.GITHUB_BASE_REF) {
+    const ref = `origin/${env.GITHUB_BASE_REF}`;
+    if (!git(root, ["rev-parse", "--verify", "--quiet", ref])) git(root, ["fetch", "--no-tags", "--depth=1", "origin", `+refs/heads/${env.GITHUB_BASE_REF}:refs/remotes/${ref}`]);
+    return git(root, ["rev-parse", "--verify", "--quiet", ref]) ? { ref } : { error: `cannot fetch ${ref}` };
+  }
+  const head = git(root, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+  for (const candidate of [head, "origin/main", "origin/master", "main", "master"].filter(Boolean)) {
+    if (!git(root, ["rev-parse", "--verify", "--quiet", candidate])) continue;
+    const mb = git(root, ["merge-base", "HEAD", candidate]);
+    if (mb) return { ref: mb };
+  }
+  return { skip: "no base branch found" };
+}
+
+/** Changes from `base` to the working tree: [{ status: A|M|D|R, path, from }]. Untracked files count as added. */
+export function changes(root, base) {
+  const out = [];
+  const diff = git(root, ["diff", "--name-status", "-M", "--no-color", base]) ?? "";
+  for (const line of diff.split("\n").filter(Boolean)) {
+    const [code, a, b] = line.split("\t");
+    const status = code[0];
+    if (status === "R") out.push({ status: "R", path: b, from: a });
+    else out.push({ status, path: a, from: a });
+  }
+  const untracked = git(root, ["ls-files", "--others", "--exclude-standard"]) ?? "";
+  for (const path of untracked.split("\n").filter(Boolean)) out.push({ status: "A", path, from: path });
+  return out;
+}
+
+// ---------- immutability ----------
+
+export function immutabilityViolations(list, settings) {
+  return list
+    .filter((c) => c.status !== "A" && matches(c.from, settings.migrations) && !matches(c.from, settings.mutable))
+    .map((c) => {
+      const verb = { M: "modified", D: "deleted", R: `renamed to ${c.path}` }[c.status] ?? "changed";
+      return `${c.from}: merged migration ${verb}. Migrations are immutable once merged; add a new migration instead.`;
+    });
+}
+
+// ---------- lint ----------
+
+const RULES = [
+  {
+    id: "index-concurrently",
+    dialects: ["postgres"],
+    test: (s, ctx) => /^create\s+(unique\s+)?index\b(?!\s+concurrently)/.test(s) && !ctx.createdHere(tableAfter(s, /\bon\s+(?:only\s+)?/)),
+    message: "CREATE INDEX without CONCURRENTLY blocks writes to the table while the index builds. Use CREATE INDEX CONCURRENTLY, outside a transaction.",
+  },
+  {
+    id: "index-concurrently",
+    dialects: ["postgres"],
+    test: (s) => /^drop\s+index\b(?!\s+concurrently)/.test(s),
+    message: "DROP INDEX without CONCURRENTLY takes an exclusive lock on the table. Use DROP INDEX CONCURRENTLY.",
+  },
+  {
+    id: "add-column-not-null",
+    test: (s, ctx) => /^alter\s+table\b/.test(s) && /\badd\s+(column\s+)?[^,]*\bnot\s+null\b/.test(s) && !/\bdefault\b/.test(s) && !ctx.createdHere(tableAfter(s, /^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?/)),
+    message: "ADD COLUMN ... NOT NULL without a DEFAULT fails on a table that has rows. Add it nullable, backfill, then add the constraint (expand/contract).",
+  },
+  {
+    id: "set-not-null",
+    dialects: ["postgres"],
+    test: (s) => /\balter\s+column\s+\S+\s+set\s+not\s+null\b/.test(s),
+    message: "SET NOT NULL scans the whole table under an exclusive lock. Add CHECK (col IS NOT NULL) NOT VALID, VALIDATE it in a later migration, then SET NOT NULL.",
+  },
+  {
+    id: "alter-column-type",
+    test: (s) => /\balter\s+column\s+\S+\s+(set\s+data\s+)?type\b/.test(s) || /^alter\s+table\b.*\bmodify\s+(column\s+)?\S+\s+\w+/.test(s),
+    message: "Changing a column type usually rewrites the table under an exclusive lock. Add a new column, backfill in batches, switch the code, then drop the old one.",
+  },
+  {
+    id: "constraint-not-valid",
+    dialects: ["postgres"],
+    test: (s, ctx) => /\badd\s+constraint\b.*\b(foreign\s+key|check)\b/.test(s) && !/\bnot\s+valid\b/.test(s) && !ctx.createdHere(tableAfter(s, /^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?/)),
+    message: "Adding a FOREIGN KEY or CHECK constraint validates every row under lock. Add it NOT VALID, then VALIDATE CONSTRAINT in a separate migration.",
+  },
+  {
+    id: "drop-or-rename",
+    test: (s) =>
+      /^drop\s+(table|schema|view|materialized\s+view)\b/.test(s) ||
+      /^alter\s+table\b.*\b(drop\s+(column\b|(?!(constraint|index|default|not|identity|expression|primary|foreign|check|key|partition|trigger)\b)[\w"`[\]]+)|rename\s+(column\s+)?\S+\s+to\b|rename\s+to\b)/.test(s) ||
+      /^(exec\s+)?sp_rename\b/.test(s),
+    message: "DROP or RENAME breaks code that is still running against the old schema. Expand/contract: stop using it in a released version first, then drop it in a later migration, and say so in an allow annotation.",
+  },
+  {
+    id: "destructive-dml",
+    test: (s) => /^truncate\b/.test(s) || (/^delete\s+from\b/.test(s) && !/\bwhere\b/.test(s)) || (/^update\s+\S+\s+set\b/.test(s) && !/\bwhere\b/.test(s)),
+    message: "TRUNCATE, or DELETE/UPDATE without WHERE, rewrites or loses every row. Do data changes in a reviewed, batched backfill, not in a schema migration.",
+  },
+];
+
+/** `alter table if exists "app"."users" add ...` → `users` */
+function tableAfter(statement, prefix) {
+  const rest = statement.replace(prefix, "\u0000").split("\u0000")[1] ?? "";
+  const name = rest.trim().split(/\s|\(/)[0] ?? "";
+  return name.split(".").pop().replace(/["`[\]]/g, "");
+}
+
+/** Statements in lower case with comments removed; the allow annotations are returned separately. */
+export function parseSql(text) {
+  const allow = new Map();
+  for (const m of text.matchAll(/--\s*migration-check:\s*allow\s+([\w-]+)\s+(.+)$/gim)) allow.set(m[1].toLowerCase(), m[2].trim());
+  const body = text
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--.*$/gm, " ")
+    .replace(/\bgo\s*$/gim, ";");
+  const statements = body
+    .split(";")
+    .map((s) => s.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter(Boolean);
+  return { statements, allow };
+}
+
+export function lintSql(text, dialect = "postgres") {
+  const { statements, allow } = parseSql(text);
+  const created = new Set(statements.map((s) => /^create\s+table\s+(?:if\s+not\s+exists\s+)?(\S+)/.exec(s)?.[1]).filter(Boolean).map((n) => n.split(".").pop().replace(/["`[\]()]/g, "")));
+  const ctx = { createdHere: (name) => Boolean(name) && created.has(name) };
+  const findings = [];
+  for (const s of statements) {
+    for (const rule of RULES) {
+      if (rule.dialects && !rule.dialects.includes(dialect)) continue;
+      if (!rule.test(s, ctx)) continue;
+      if (allow.has(rule.id)) continue;
+      findings.push({ rule: rule.id, statement: s.slice(0, 120), message: rule.message });
+    }
+  }
+  const warnings = [];
+  const altersExisting = statements.some((s) => /^alter\s+table\b/.test(s) && !ctx.createdHere(tableAfter(s, /^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?/)));
+  if (dialect === "postgres" && altersExisting && !statements.some((s) => /^set\s+(local\s+)?lock_timeout\b/.test(s)))
+    warnings.push("ALTER TABLE without SET lock_timeout: a migration that waits for a lock blocks every query queued behind it. Consider SET lock_timeout = '5s'.");
+  if (dialect === "sqlserver" && !allow.has("index-online"))
+    for (const s of statements)
+      if (/^create\s+(unique\s+)?((non)?clustered\s+)?index\b/.test(s) && !/\bonline\s*=\s*on\b/.test(s) && !ctx.createdHere(tableAfter(s, /\bon\s+/))) warnings.push(SQLSERVER_ONLINE);
+  return { findings, warnings };
+}
+
+const SQLSERVER_ONLINE = "CREATE INDEX without ONLINE = ON blocks writes to the table while the index builds. Use WITH (ONLINE = ON) where the edition supports it (Enterprise, Azure SQL), or schedule the migration.";
+
+// ---------- EF Core migrations (C#) ----------
+
+/** The body of `Up(MigrationBuilder ...)`. Down() reverses Up and may drop what Up created. */
+export function upBody(text) {
+  const at = text.search(/\bvoid\s+Up\s*\(/);
+  if (at < 0) return "";
+  const open = text.indexOf("{", at);
+  if (open < 0) return "";
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}" && --depth === 0) return text.slice(open + 1, i);
+  }
+  return text.slice(open + 1);
+}
+
+const TRIPLE = '"'.repeat(3);
+
+/** Index just past the `)` matching the `(` at `open`, skipping C# string literals. */
+function closeParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (text.startsWith(TRIPLE, i)) {
+        const end = text.indexOf(TRIPLE, i + 3);
+        i = end < 0 ? text.length : end + 2;
+      } else if (text[i - 1] === "@") {
+        for (i++; i < text.length; i++) {
+          if (text[i] !== '"') continue;
+          if (text[i + 1] === '"') i++;
+          else break;
+        }
+      } else {
+        for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === "\\") i++;
+      }
+    } else if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) return i + 1;
+  }
+  return text.length;
+}
+
+/** migrationBuilder.<Op>(args) calls in order, with any chained .Annotation(...) text. */
+export function efCalls(body) {
+  const out = [];
+  const re = /migrationBuilder\s*\.\s*(\w+)\s*(?:<[^>]*>)?\s*\(/g;
+  for (let m = re.exec(body); m; m = re.exec(body)) {
+    const open = m.index + m[0].length - 1;
+    const end = closeParen(body, open);
+    let tail = end;
+    for (let t = /^\s*\.\s*(?:Old)?Annotation\s*\(/.exec(body.slice(tail)); t; t = /^\s*\.\s*(?:Old)?Annotation\s*\(/.exec(body.slice(tail))) tail = closeParen(body, tail + t[0].length - 1);
+    out.push({ op: m[1], args: body.slice(open + 1, end - 1), chain: body.slice(end, tail) });
+    re.lastIndex = tail;
+  }
+  return out;
+}
+
+const EF_ARGS = new Set(["name", "table", "nullable", "oldNullable", "type", "oldType", "defaultValue", "defaultValueSql", "computedColumnSql"]);
+/** The value of a named argument (`nullable: false`), or null. */
+function arg(args, name) {
+  if (!EF_ARGS.has(name)) throw new Error(`unknown EF argument ${name}`);
+  const m = new RegExp(`\\b${name}\\s*:\\s*("(?:[^"\\\\]|\\\\.)*"|[^,)]+)`).exec(args); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- name is one of the fixed EF_ARGS
+  return m ? m[1].trim() : null;
+}
+const unquote = (v) => (v ?? "").replace(/^@?"|"$/g, "");
+
+/** The first C# string literal in `args`: "...", @"..." or a raw string literal. Interpolated strings are not read. */
+export function csString(args) {
+  const start = args.search(/\S/);
+  if (start < 0) return null;
+  const rest = args.slice(start);
+  if (rest.startsWith(TRIPLE)) {
+    const end = rest.indexOf(TRIPLE, 3);
+    return end < 0 ? null : rest.slice(3, end);
+  }
+  const verbatim = /^@"((?:[^"]|"")*)"/.exec(rest);
+  if (verbatim) return verbatim[1].replace(/""/g, '"');
+  const plain = /^"((?:[^"\\]|\\.)*)"/.exec(rest);
+  if (!plain) return null;
+  return plain[1].replace(/\\(.)/g, (_, c) => ({ n: "\n", t: "\t", r: "" })[c] ?? c);
+}
+
+const RULE_MESSAGE = Object.fromEntries(RULES.map((r) => [r.id, r.message]));
+
+export function lintEf(text, dialect = "postgres") {
+  const allow = new Map();
+  for (const m of text.matchAll(/\/\/\s*migration-check:\s*allow\s+([\w-]+)\s+(.+)$/gim)) allow.set(m[1].toLowerCase(), m[2].trim());
+  const calls = efCalls(upBody(text));
+  const created = new Set(calls.filter((c) => c.op === "CreateTable").map((c) => unquote(arg(c.args, "name"))));
+  const existing = (c) => !created.has(unquote(arg(c.args, "table") ?? arg(c.args, "name")));
+  const findings = [];
+  const warnings = [];
+  const add = (rule, call, message = RULE_MESSAGE[rule]) => {
+    if (!allow.has(rule)) findings.push({ rule, statement: `migrationBuilder.${call.op}(${call.args.replace(/\s+/g, " ").trim().slice(0, 100)})`, message });
+  };
+  for (const c of calls) {
+    const has = (name) => arg(c.args, name) !== null;
+    if (["DropTable", "DropColumn", "RenameColumn", "RenameTable", "DropSchema"].includes(c.op)) add("drop-or-rename", c);
+    else if (c.op === "AddColumn") {
+      if (arg(c.args, "nullable") === "false" && !has("defaultValue") && !has("defaultValueSql") && !has("computedColumnSql") && existing(c)) add("add-column-not-null", c);
+    } else if (c.op === "AlterColumn") {
+      const type = unquote(arg(c.args, "type"));
+      const oldType = unquote(arg(c.args, "oldType"));
+      if (type && oldType && type.toLowerCase() !== oldType.toLowerCase()) add("alter-column-type", c);
+      else if (dialect === "postgres" && arg(c.args, "nullable") === "false" && arg(c.args, "oldNullable") === "true") add("set-not-null", c);
+    } else if (c.op === "CreateIndex") {
+      if (!existing(c)) continue;
+      if (dialect === "postgres" && !/"Npgsql:CreatedConcurrently"\s*,\s*true/.test(c.chain))
+        add("index-concurrently", c, 'CreateIndex without concurrent creation blocks writes to the table while the index builds. Mark the index .IsCreatedConcurrently() in the model (Npgsql), so the migration gets .Annotation("Npgsql:CreatedConcurrently", true).');
+      if (dialect === "sqlserver" && !/"SqlServer:Online"\s*,\s*true/.test(c.chain) && !allow.has("index-online")) warnings.push(`${SQLSERVER_ONLINE} In EF Core: .IsCreatedOnline() on the index.`);
+    } else if (["AddForeignKey", "AddCheckConstraint"].includes(c.op)) {
+      if (dialect === "postgres" && existing(c))
+        add("constraint-not-valid", c, 'Adding a foreign key or check constraint to an existing table validates every row under lock. EF Core cannot emit NOT VALID: add it with migrationBuilder.Sql("... NOT VALID"), then VALIDATE CONSTRAINT in a later migration.');
+    } else if (c.op === "Sql") {
+      const sql = csString(c.args);
+      if (sql === null) continue;
+      for (const f of lintSql(sql, dialect).findings) if (!allow.has(f.rule)) findings.push(f);
+    }
+  }
+  return { findings, warnings };
+}
+
+const isEfMigration = (path) => path.endsWith(".cs") && !path.endsWith(".Designer.cs");
+
+// ---------- main ----------
+
+export function run(root, { base, all = false, env = process.env } = {}) {
+  const settings = loadSettings(root);
+  const b = resolveBase(root, { base, env });
+  if (b.error) return { code: 2, lines: [`migration-check: ${b.error}`] };
+  if (b.skip) return { code: 0, lines: [`migration-check: skipped (${b.skip})`] };
+  const list = changes(root, b.ref);
+  const lines = [];
+  const errors = immutabilityViolations(list, settings);
+  const lintable = (p) => (p.toLowerCase().endsWith(".sql") || isEfMigration(p)) && matches(p, settings.migrations);
+  const toLint = all
+    ? (git(root, ["ls-files"]) ?? "").split("\n").filter(lintable).map((path) => ({ status: "M", path }))
+    : list.filter((c) => c.status !== "D" && lintable(c.path));
+  let linted = 0;
+  for (const c of toLint) {
+    if (matches(c.path, settings.mutable) || !existsSync(join(root, c.path))) continue;
+    linted++;
+    const text = readFileSync(join(root, c.path), "utf8");
+    const { findings, warnings } = c.path.endsWith(".cs") ? lintEf(text, settings.dialect) : lintSql(text, settings.dialect);
+    for (const f of findings) errors.push(`${c.path}: [${f.rule}] ${f.message}\n    > ${f.statement}`);
+    for (const w of warnings) lines.push(`warning ${c.path}: ${w}`);
+  }
+  for (const e of errors) lines.push(`error   ${e}`);
+  lines.push(`migration-check (${settings.dialect}): ${list.length} changed file(s), ${linted} migration(s) linted, ${errors.length} error(s)`);
+  if (errors.length) lines.push("Accept a lint finding only with a reason: -- migration-check: allow <rule-id> <why this is safe here> (// in C#)");
+  return { code: errors.length ? 1 : 0, lines };
+}
+
+const isMain = (() => {
+  try {
+    return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (isMain) {
+  const args = process.argv.slice(2);
+  const i = args.indexOf("--base");
+  const result = run(process.cwd(), { base: i >= 0 ? args[i + 1] : undefined, all: args.includes("--all") });
+  for (const l of result.lines) console.log(l);
+  process.exit(result.code);
+}

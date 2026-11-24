@@ -1,0 +1,13 @@
+# Keeps GitHub Actions current (ideal-agentic-env/governance). Stack plugins add their ecosystems.
+# cooldown: a new release waits 14 days before it is proposed, so a bad release can be pulled first.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns: ["*"]

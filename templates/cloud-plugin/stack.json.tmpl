@@ -1,0 +1,14 @@
+{
+  "$comment": "Cloud plugin contract (docs/YENI-BULUT-EKLEME.md). Applied add-only by /{{NAME}}:setup; validated by scripts/validate.mjs. Released cloud plugins list their destructive {{CLI}} commands in config.guardedCommands.",
+  "profiles": {
+    "{{CLI}}": {
+      "scope": "repo",
+      "detect": { "files": ["infra/**", "**/*.tf", "**/Pulumi.yaml"] },
+      "paths": ["infra/**", "**/*.tf", "**/Pulumi*.yaml"],
+      "rules": ["cloud.md"]
+    }
+  },
+  "config": {
+    "guardedCommands": []
+  }
+}

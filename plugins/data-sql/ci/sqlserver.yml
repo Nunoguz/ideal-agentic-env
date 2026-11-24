@@ -1,0 +1,16 @@
+# SQL Server (Developer edition) for integration tests in `verify --full` (data-sql). Pinned by digest. The
+# sa password comes from the run id: a throwaway container, not a secret. Using the image accepts the SQL
+# Server Developer edition license (free for development and test).
+sqlserver:
+  image: mcr.microsoft.com/mssql/server:2025-CU9-GDR1-ubuntu-24.04@sha256:742481d1b1186cccc81220a1eaacef244ca8d0f7d19c8e5c70df8ae541ffbab2
+  env:
+    ACCEPT_EULA: "Y"
+    MSSQL_PID: Developer
+    MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-Pw!
+  ports:
+    - 1433:1433
+  options: >-
+    --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"
+    --health-interval 10s
+    --health-timeout 5s
+    --health-retries 20

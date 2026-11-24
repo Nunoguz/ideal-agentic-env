@@ -1,0 +1,15 @@
+{
+  "name": "data-sql",
+  "version": "1.0.0",
+  "description": "Relational database discipline: safe migrations (SQL and EF Core), indexing, row-level security, query review (PostgreSQL, SQL Server, MySQL).",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "data",
+    "sql",
+    "postgresql",
+    "migrations"
+  ]
+}

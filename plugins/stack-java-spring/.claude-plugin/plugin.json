@@ -1,0 +1,17 @@
+{
+  "name": "stack-java-spring",
+  "version": "1.0.0",
+  "description": "Java / Spring Boot: Maven and Gradle, Spring Modulith boundaries, ArchUnit, Flyway, Testcontainers, Maven Central cooldown, jdtls.",
+  "author": {
+    "name": "Nunoguz"
+  },
+  "repository": "https://github.com/Nunoguz/ideal-agentic-env",
+  "keywords": [
+    "stack",
+    "java",
+    "spring-boot",
+    "spring-modulith",
+    "maven",
+    "gradle"
+  ]
+}

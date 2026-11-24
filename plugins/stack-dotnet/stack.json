@@ -1,0 +1,51 @@
+{
+  "$comment": "Stack contract (ADR-0006, ADR-0010). Applied add-only by /stack-dotnet:setup; validated by scripts/validate.mjs.",
+  "ecosystem": "dotnet",
+  "profiles": {
+    "dotnet": {
+      "scope": "repo",
+      "detect": { "files": ["**/*.csproj", "**/*.fsproj"] },
+      "paths": ["**/*.cs", "**/*.csproj", "**/Directory.Build.props", "**/Directory.Packages.props", "global.json"],
+      "rules": ["dotnet.md"]
+    },
+    "aspnetcore": {
+      "detect": { "sdk": ["Microsoft.NET.Sdk.Web"] },
+      "paths": ["**/*.cs", "appsettings*.json"],
+      "rules": ["aspnetcore.md"]
+    },
+    "test": {
+      "detect": { "dependencies": ["xunit", "xunit.v3", "NUnit", "MSTest", "MSTest.TestFramework", "Microsoft.NET.Test.Sdk", "TUnit"] },
+      "paths": ["**/*.cs"],
+      "rules": ["testing.md"]
+    }
+  },
+  "format": [
+    { "glob": "**/*.cs", "run": "dotnet csharpier format {file}", "when": { "fileContains": { ".config/dotnet-tools.json": "csharpier" } } },
+    { "glob": "**/*.cs", "run": "dotnet format whitespace --folder --include {file}", "when": { "notFileContains": { ".config/dotnet-tools.json": "csharpier" } } }
+  ],
+  "verify": {
+    "fast": [
+      { "name": "dotnet build", "run": "dotnet build {solution} --nologo", "when": { "files": ["**/*.csproj", "**/*.fsproj"] } },
+      { "name": "dotnet format", "run": "dotnet format {solution} --verify-no-changes --no-restore", "when": { "files": ["**/*.csproj", "**/*.fsproj"] } }
+    ],
+    "full": [
+      { "name": "dotnet test", "run": "dotnet test {solution} --nologo", "when": { "files": ["**/*.csproj", "**/*.fsproj"] } }
+    ]
+  },
+  "ci": {
+    "steps": [
+      { "file": "ci/setup-dotnet-global-json.yml", "when": { "files": ["global.json"] } },
+      { "file": "ci/setup-dotnet.yml", "when": { "files": ["**/*.csproj", "**/*.fsproj"], "notFiles": ["global.json"] } }
+    ]
+  },
+  "hints": [
+    {
+      "when": { "files": ["**/*ModelSnapshot.cs"], "notFileContains": { ".editorconfig": "Migrations/" } },
+      "note": "EF Core writes migrations with a byte order mark, so dotnet format --verify-no-changes fails on them; add [**/Migrations/*.cs] with generated_code = true to .editorconfig (core:init's template has it)"
+    }
+  ],
+  "dependabot": { "ecosystem": "nuget", "lockfiles": ["packages.lock.json"] },
+  "lockfileHint": "set RestorePackagesWithLockFile in Directory.Build.props (setup's template does), run dotnet restore and commit every packages.lock.json: CI restores in locked mode and OSV-Scanner reads them",
+  "lsp": { "binary": "csharp-ls", "install": "dotnet tool install --global csharp-ls (a version published at least 14 days ago, for example --version 0.28.0)" },
+  "templates": true
+}

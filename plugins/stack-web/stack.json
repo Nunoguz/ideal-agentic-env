@@ -1,0 +1,70 @@
+{
+  "$comment": "Stack contract (ADR-0006). Applied add-only by /stack-web:setup; validated by scripts/validate.mjs.",
+  "profiles": {
+    "npm": {
+      "scope": "repo",
+      "companion": true,
+      "detect": { "files": ["package.json"] },
+      "paths": ["**/package.json", "**/.npmrc"],
+      "rules": ["npm-dependencies.md"]
+    },
+    "web": {
+      "detect": { "dependencies": ["react", "next", "vue", "nuxt", "svelte", "@sveltejs/kit", "solid-js", "vite", "@angular/core"], "notDependencies": ["react-native", "expo"] },
+      "paths": ["**/*.{ts,tsx,js,jsx,mjs,css,vue}"],
+      "rules": ["web.md"]
+    },
+    "vue": {
+      "detect": { "dependencies": ["vue", "nuxt"] },
+      "paths": ["**/*.{vue,ts,tsx}"],
+      "rules": ["vue.md"]
+    },
+    "nuxt": {
+      "detect": { "dependencies": ["nuxt"] },
+      "paths": ["**/*.{vue,ts}", "nuxt.config.*", "app.config.*"],
+      "rules": ["nuxt.md"]
+    },
+    "react": {
+      "detect": { "dependencies": ["react"], "notDependencies": ["react-native", "expo"] },
+      "paths": ["**/*.{tsx,jsx}"],
+      "rules": ["react.md"]
+    },
+    "next": {
+      "detect": { "dependencies": ["next"] },
+      "paths": ["**/*.{ts,tsx}", "next.config.*"],
+      "rules": ["next.md"]
+    }
+  },
+  "format": [
+    { "glob": "**/*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,vue}", "run": "npx --no-install prettier --write --log-level warn {file}", "when": { "dependencies": ["prettier"] } },
+    { "glob": "**/*.{ts,tsx,js,jsx,mjs,cjs,json,css}", "run": "npx --no-install biome format --write {file}", "when": { "dependencies": ["@biomejs/biome"] } }
+  ],
+  "formatHint": "add prettier (or @biomejs/biome) as a devDependency and re-run setup",
+  "verify": {
+    "fast": [
+      { "name": "typecheck", "script": "typecheck", "recommended": "tsc --noEmit for every package (vue-tsc --noEmit for Vue, nuxi typecheck for Nuxt)" },
+      { "name": "lint", "script": "lint", "recommended": "eslint with the framework's config (eslint-config-next and jsx-a11y; eslint-plugin-vue and vuejs-accessibility)" },
+      { "name": "test:unit", "script": "test:unit" }
+    ],
+    "full": [
+      { "name": "test", "script": "test", "recommended": "unit and component tests" },
+      { "name": "build", "script": "build", "recommended": "the production build" },
+      { "name": "bundle-budget", "run": "node .github/scripts/bundle-budget.mjs", "when": { "script": "build" } },
+      { "name": "test:e2e", "script": "test:e2e" }
+    ]
+  },
+  "config": {
+    "web": { "budget": { "largestChunkKb": 200, "totalJsKb": 600 } }
+  },
+  "ci": {
+    "steps": [{ "file": "ci/playwright.yml", "when": { "dependencies": ["@playwright/test"] } }]
+  },
+  "dependabot": { "ecosystem": "npm", "lockfiles": ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"] },
+  "lsp": { "binary": "typescript-language-server", "install": "npm install -g typescript-language-server typescript" },
+  "hints": [
+    {
+      "when": { "dependencies": ["vue", "nuxt"], "notDependencies": ["@vue/typescript-plugin"] },
+      "note": "add @vue/typescript-plugin (the same version as vue-tsc) as a devDependency: the TypeScript language server loads it for code intelligence in .vue files"
+    }
+  ],
+  "templates": true
+}

@@ -1,0 +1,11 @@
+{
+  "$comment": "stack-dotnet with data-sql on SQL Server: setup detects dotnet, aspnetcore and test, plus sql, sqlserver and efcore; migration-check reads the EF Core migration; verify --full builds, checks formatting and runs the integration tests against the SQL Server service (CI only).",
+  "setups": ["stack-dotnet", "data-sql"],
+  "install": ["dotnet restore Fixture.slnx"],
+  "expect": {
+    "profiles": {
+      "stack-dotnet": ["dotnet", "aspnetcore", "test"],
+      "data-sql": ["sql", "sqlserver", "efcore"]
+    }
+  }
+}
