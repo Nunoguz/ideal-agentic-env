@@ -195,12 +195,12 @@ export function mergeSettings(existing, wanted) {
 function ciSetup(stacks, info, root) {
   const lines = [];
   const pm = info.packageManager;
-  if (pm === "pnpm") lines.push("      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0");
+  if (pm === "pnpm") lines.push("      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1");
   if (pm) lines.push(`      - run: ${pm === "npm" ? "npm ci" : pm === "pnpm" ? "pnpm install --frozen-lockfile" : "yarn install --immutable"}`);
   // .NET and Java: /stack-dotnet:setup and /stack-java-spring:setup write their setup step (with the
   // package cache and the version the build declares) into the steps region.
   if (info.python) {
-    lines.push("      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0", "        with:", '          python-version: "3.13"');
+    lines.push("      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0", "        with:", '          python-version: "3.13"');
     lines.push(info.python.uv ? "      - run: pip install uv && uv sync" : "      - run: pip install -r requirements.txt");
   }
   return lines.join("\n");

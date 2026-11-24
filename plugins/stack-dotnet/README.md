@@ -1,6 +1,6 @@
 # stack-dotnet
 
-> **Durum:** Stabil, 1.0.0.
+> **Durum:** Stabil, 1.0.1.
 
 .NET / C# backend'leri için stack plugin'i: C# dili ve build disiplini, ASP.NET Core ve testler. EF Core migration'ları ve veritabanı kuralları `data-sql`'de.
 

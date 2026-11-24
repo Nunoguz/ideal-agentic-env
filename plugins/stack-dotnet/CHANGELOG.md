@@ -1,5 +1,9 @@
 # Changelog — stack-dotnet
 
+## 1.0.1
+
+- CI fragment: `actions/setup-dotnet` v6.1.0 (was v4.3.1), Node.js 24 (self-hosted runners need v2.327.1 or newer). The inputs used (`dotnet-version`, `global-json-file`, `cache`, `cache-dependency-path`) are unchanged. Run `/stack-dotnet:setup --refresh` to update a project's `ci.yml` block.
+
 ## 1.0.0
 
 - Stabil: 1.x içinde kırıcı değişiklik yok; kırıcı her değişiklik major sürüm ve göç notuyla gelir ([ADR-0012](../../docs/adr/0012-v1-surum-sozu.md)). 0.1.0'ın üzerine yalnız bu bölümdeki maddeleri getirir.

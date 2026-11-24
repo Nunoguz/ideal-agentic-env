@@ -1,6 +1,6 @@
 {
   "name": "stack-dotnet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": ".NET / C#: nullable and analyzer discipline, ASP.NET Core patterns, NuGet cooldown, csharp-ls, testing with WebApplicationFactory.",
   "author": {
     "name": "Nunoguz"
