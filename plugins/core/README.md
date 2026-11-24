@@ -1,6 +1,6 @@
 # core
 
-> **Status:** Stable, 1.1.1. Every project needs it.
+> **Status:** Stable, 1.2.0. Every project needs it.
 
 The foundation of the environment. It brings:
 
@@ -33,7 +33,7 @@ One command:
 4. runs every chosen plugin's setup script straight from its installed copy,
 5. runs `verify --fast`.
 
-`/core:plugins` adds or removes plugins later. Removing a plugin takes back its rules, CI blocks, verify and format entries and unedited managed files. Edited files and Dependabot entries stay and are reported. The script behind both is `skills/init/scripts/bootstrap.mjs`; `--no-install` prints the `claude plugin install` commands instead of running them.
+`/core:update` updates every plugin the project uses (and installs any this clone lacks), re-runs their setups with `--refresh` and runs `verify --fast`. Files the project edited are kept and reported. `/core:plugins` adds or removes plugins later. Removing a plugin takes back its rules, CI blocks, verify and format entries and unedited managed files. Edited files and Dependabot entries stay and are reported. The script behind both is `skills/init/scripts/bootstrap.mjs`; `--no-install` prints the `claude plugin install` commands instead of running them.
 
 ## Hooks
 
@@ -75,6 +75,7 @@ In an emergency `git push --no-verify` bypasses it; governance's `change-audit` 
 | --- | --- |
 | `/core:init` | Setting a project up (typed by the user only) |
 | `/core:plugins` | Adding or removing plugins (typed by the user only) |
+| `/core:update` | Updating every plugin and refreshing the files they manage (typed by the user only) |
 | `plan` | An approved plan before code (`docs/plans/`) |
 | `implement` | Executing an approved plan slice by slice, test first |
 | `verify` | Running the checks and finding the root cause of a red one |

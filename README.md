@@ -61,10 +61,11 @@ Stable plugins follow semantic versioning: a breaking change comes only in a maj
 | Check before a PR | `/core:pre-pr` |
 | Open the PR | `/work-github:pr` |
 | Add or remove plugins | `/core:plugins` |
+| Update everything | `/core:update` |
 
 Plain language works too: "take issue 42", "plan this", "open the PR".
 
-**Updating:** run `claude plugin marketplace update ideal-agentic-env`, update the plugins in the `/plugin` menu, then `/<plugin>:setup --refresh` in the project.
+**Updating:** run `/core:update` in the project. It updates every plugin the project uses, refreshes the files their setups manage and runs the checks; restart Claude Code afterwards. One person commits the refreshed files in a PR, and everyone else gets them with `git pull`.
 
 ## Development
 

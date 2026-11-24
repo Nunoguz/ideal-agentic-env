@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { bootstrap, desiredPlugins, render } from "./bootstrap.mjs";
@@ -103,4 +103,30 @@ test("install: the claude CLI is called at project scope for each missing plugin
   } finally {
     delete process.env.CLAUDE_BIN;
   }
+});
+
+test("update: refreshes what the plugins manage, keeps what the project edited, verifies", async () => {
+  const { update } = await import("./bootstrap.mjs");
+  assert.throws(() => update(project({})), /run \/core:init first/);
+  const root = project(NODE_API);
+  bootstrap(root, { detect: true, noInstall: true });
+  const rule = readdirSync(join(root, ".claude", "rules", "stack-node")).find((f) => f.endsWith(".md"));
+  const rulePath = join(root, ".claude", "rules", "stack-node", rule);
+  writeFileSync(rulePath, readFileSync(rulePath, "utf8").replace(/\n\n[\s\S]*$/, "\n\n# an older version of the rule\n"));
+  const script = join(root, ".github", "scripts", "migration-check.mjs");
+  writeFileSync(script, `${readFileSync(script, "utf8")}\n// local change\n`);
+
+  const r = update(root, { noInstall: true });
+  assert.deepEqual(r.plugins, ["core", "governance", "work-github", "stack-node", "data-sql"]);
+  assert.deepEqual(r.setups.map((s) => [s.plugin, s.status]), [["governance", "ok"], ["work-github", "ok"], ["stack-node", "ok"], ["data-sql", "ok"]], JSON.stringify(r.setups));
+  assert.equal(r.manual[0], "claude plugin marketplace update ideal-agentic-env");
+  assert.ok(r.manual.includes("claude plugin install stack-node@ideal-agentic-env --scope project"), "a plugin this clone lacks is installed");
+  const node = r.setups.find((s) => s.plugin === "stack-node");
+  assert.ok(node.changed.includes(`update .claude/rules/stack-node/${rule}`), "an outdated rule is refreshed");
+  assert.doesNotMatch(readFileSync(rulePath, "utf8"), /an older version/);
+  const sql = r.setups.find((s) => s.plugin === "data-sql");
+  assert.ok(sql.kept.some((k) => k.startsWith(".github/scripts/migration-check.mjs")), "an edited managed file is kept and reported");
+  assert.match(readFileSync(script, "utf8"), /local change/);
+  assert.ok(r.verify.ok, r.verify.tail);
+  assert.match(render(r), /Commit the refreshed files/);
 });
