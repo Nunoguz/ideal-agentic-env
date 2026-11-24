@@ -1,6 +1,6 @@
 # core
 
-> **Status:** Stable, 1.1.0. Every project needs it.
+> **Status:** Stable, 1.1.1. Every project needs it.
 
 The foundation of the environment. It brings:
 

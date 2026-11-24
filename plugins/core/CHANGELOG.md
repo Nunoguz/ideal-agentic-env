@@ -1,5 +1,9 @@
 # Changelog — core
 
+## 1.1.1
+
+- CI lines `core:init` writes: `pnpm/action-setup` v6.1.1 (was v4.4.0) and `actions/setup-python` v7.1.0 (was v5.6.0). Both run on Node.js 24: GitHub-hosted runners are fine, self-hosted runners need v2.327.1 or newer. The inputs used (`python-version`; none for pnpm) are unchanged. New scaffolds only; an existing `ci.yml` is the project's.
+
 ## 1.1.0
 
 - **One-step setup.** `/core:init` detects the stack, shows a plugin checklist, installs the chosen plugins at project scope (with `governance` and `work-github`), writes the scaffold, runs every plugin's setup script straight from its installed copy and runs `verify --fast`. `--yes` takes the detected plugins; `--plugins a,b` takes exactly those. It also sets `core.hooksPath` ([ADR-0013](../../docs/adr/0013-one-step-onboarding.md)).
