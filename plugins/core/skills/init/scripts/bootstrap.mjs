@@ -8,6 +8,7 @@
 //   node bootstrap.mjs [--target .] [--detect] [--add a,b] [--remove a,b] [--owner @x]
 //                      [--docs-language English] [--source github|pbi] [--default-branch main]
 //                      [--no-install] [--dry-run] [--json]
+//   node bootstrap.mjs --update [--target .] [--no-install] [--json]   (core:update)
 //
 //   --detect      start from the stacks core:init detects (in addition to what the project enables)
 //   --add/remove  change the plugin set; core, governance and work-github cannot be removed
@@ -253,37 +254,88 @@ export function bootstrap(target, opts = {}) {
   if (!opts.dryRun && removing.length) dropFromSettings(root, removing);
 
   // 3. Every plugin's setup, straight from its installed copy (no restart needed).
+  report.setups = runSetups(root, plugins, opts);
+  // 4. Prove it.
+  if (!opts.dryRun) report.verify = verifyFast(root);
+  return report;
+}
+
+/** Run each plugin's setup script (with --refresh when updating) and collect what it changed and noted. */
+function runSetups(root, plugins, opts, { refresh = false } = {}) {
+  const out = [];
   for (const p of SETUP_ORDER.filter((x) => plugins.includes(x))) {
     const dir = pluginRoot(p, root);
     const script = dir && join(dir, "skills", "setup", "scripts", "setup.mjs");
     if (!script || !existsSync(script)) {
-      report.setups.push({ plugin: p, status: "not found", notes: [`${p} is not installed yet; install it, restart Claude Code and run /${p}:setup`] });
+      out.push({ plugin: p, status: "not found", notes: [`${p} is not installed yet; install it, restart Claude Code and run /${p}:setup`] });
       continue;
     }
     // A dry run lists the setups: before the scaffold exists, their own dry runs would only report it missing.
     if (opts.dryRun) {
-      report.setups.push({ plugin: p, status: "will run", notes: [] });
+      out.push({ plugin: p, status: "will run", notes: [] });
       continue;
     }
-    const args = [script, "--target", root, "--json"];
+    // work-github's files are add-only templates without a managed marker, so its setup has nothing to refresh.
+    const args = [script, "--target", root, "--json", ...(refresh && p !== "work-github" ? ["--refresh"] : [])];
     if (p === "governance") args.push("--default-branch", opts.defaultBranch ?? defaultBranch(root));
     if (p === "work-github" && opts.source) args.push("--source", opts.source);
     const r = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8", windowsHide: true, timeout: 120000 });
-    const out = r.status === 0 ? readJsonText(r.stdout) : null;
-    if (!out) {
-      report.setups.push({ plugin: p, status: "failed", notes: [String(r.stderr || r.stdout).trim().split("\n").slice(-3).join(" ")] });
+    const res = r.status === 0 ? readJsonText(r.stdout) : null;
+    if (!res) {
+      out.push({ plugin: p, status: "failed", notes: [String(r.stderr || r.stdout).trim().split("\n").slice(-3).join(" ")] });
       continue;
     }
-    const changed = (out.actions ?? []).filter((a) => a.action !== "skip").map((a) => `${a.action} ${a.rel}`);
-    report.setups.push({ plugin: p, status: "ok", profiles: out.profiles, changed, notes: out.notes ?? [] });
+    const changed = (res.actions ?? []).filter((a) => a.action !== "skip").map((a) => `${a.action} ${a.rel}`);
+    // Files setup left alone because the project changed them: the user decides (--adopt) whether to replace them.
+    const kept = (res.actions ?? []).filter((a) => a.action === "skip" && /edited|not managed|outdated/.test(a.note ?? "")).map((a) => `${a.rel} (${a.note})`);
+    out.push({ plugin: p, status: "ok", profiles: res.profiles, changed, kept, notes: res.notes ?? [] });
   }
+  return out;
+}
 
-  // 4. Prove it.
-  if (!opts.dryRun && existsSync(join(root, "scripts", "verify.mjs"))) {
-    const r = spawnSync(process.execPath, ["scripts/verify.mjs", "--fast"], { cwd: root, encoding: "utf8", windowsHide: true, timeout: 900000 });
-    const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-    report.verify = { ok: r.status === 0, empty: /NO CHECKS CONFIGURED/.test(text), tail: text.trim().split("\n").slice(-8).join("\n") };
+function verifyFast(root) {
+  if (!existsSync(join(root, "scripts", "verify.mjs"))) return null;
+  const r = spawnSync(process.execPath, ["scripts/verify.mjs", "--fast"], { cwd: root, encoding: "utf8", windowsHide: true, timeout: 900000 });
+  const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  return { ok: r.status === 0, empty: /NO CHECKS CONFIGURED/.test(text), tail: text.trim().split("\n").slice(-8).join("\n") };
+}
+
+/** Installed version and scope of a plugin for this project: { version, scope } or null. */
+function installedEntry(name, root) {
+  const registry = readJson(join(configDir(), "plugins", "installed_plugins.json"))?.plugins?.[key(name)] ?? [];
+  const e = registry.find((x) => x.scope === "project" && sameDir(x.projectPath, root)) ?? registry.find((x) => x.scope === "user");
+  return e ? { version: e.version, scope: e.scope } : null;
+}
+
+/**
+ * core:update: refresh the marketplace, update every plugin the project uses (installing the ones this clone
+ * lacks), re-run every setup with --refresh (managed files the project edited stay; they are reported), verify.
+ */
+export function update(target, opts = {}) {
+  const root = resolve(target);
+  if (!existsSync(join(root, CONFIG))) throw new Error(`${root} is not set up yet; run /core:init first`);
+  const plugins = ["core", ...SETUP_ORDER.filter((p) => new Set([...MANDATORY, ...enabledPlugins(root)]).has(p))];
+  const report = { root, mode: "update", plugins, versions: [], manual: [], setups: [], verify: null };
+  const before = Object.fromEntries(plugins.map((p) => [p, installedEntry(p, root)]));
+  const run = (args) => {
+    if (opts.noInstall) {
+      report.manual.push(`claude ${args.join(" ")}`);
+      return;
+    }
+    const r = claude(args, root);
+    if (!r.ok) report.manual.push(`claude ${args.join(" ")}  (failed: ${r.out})`);
+  };
+  run(["plugin", "marketplace", "update", MARKETPLACE]);
+  for (const p of plugins) {
+    const e = before[p];
+    run(e ? ["plugin", "update", key(p), "--scope", e.scope] : ["plugin", "install", key(p), "--scope", "project"]);
   }
+  for (const p of plugins) {
+    const now = installedEntry(p, root);
+    report.versions.push({ plugin: p, from: before[p]?.version ?? null, to: now?.version ?? null });
+  }
+  report.setups = runSetups(root, plugins, opts, { refresh: true });
+  report.verify = verifyFast(root);
   return report;
 }
 
@@ -296,19 +348,22 @@ function readJsonText(text) {
 }
 
 export function render(r) {
-  const lines = [`${r.dryRun ? "[dry run] " : ""}target: ${r.root}`, `detected: ${r.detected.join(", ") || "(none)"}`, `plugins: ${r.plugins.join(", ")}`];
-  if (r.scaffold.length) lines.push(`scaffold: ${r.scaffold.length} change(s)`, ...r.scaffold.map((s) => `  ${s}`));
-  if (r.installed.length) lines.push(`installed: ${r.installed.join(", ")}`);
-  if (r.removed.length) lines.push(`removed: ${r.removed.join(", ")}`, ...r.cleanup.map((c) => `  cleaned ${c}`), ...r.kept.map((k) => `  kept ${k}`));
+  const lines = [`${r.dryRun ? "[dry run] " : ""}target: ${r.root}`, ...(r.detected ? [`detected: ${r.detected.join(", ") || "(none)"}`] : []), `plugins: ${r.plugins.join(", ")}`];
+  if (r.scaffold?.length) lines.push(`scaffold: ${r.scaffold.length} change(s)`, ...r.scaffold.map((s) => `  ${s}`));
+  if (r.installed?.length) lines.push(`installed: ${r.installed.join(", ")}`);
+  if (r.removed?.length) lines.push(`removed: ${r.removed.join(", ")}`, ...r.cleanup.map((c) => `  cleaned ${c}`), ...r.kept.map((k) => `  kept ${k}`));
+  for (const v of r.versions ?? []) lines.push(`${v.plugin}: ${v.from ?? "not installed"} -> ${v.to ?? "?"}${v.from && v.from === v.to ? " (up to date)" : ""}`);
   for (const s of r.setups) {
     lines.push(`setup ${s.plugin}: ${s.status}${s.profiles?.length ? ` (${s.profiles.join(", ")})` : ""}`);
     for (const c of s.changed ?? []) lines.push(`  ${c}`);
+    for (const k of s.kept ?? []) lines.push(`  kept ${k}`);
     for (const n of s.notes ?? []) lines.push(`  note ${n}`);
   }
   for (const n of r.notes ?? []) lines.push(`note ${n}`);
   if (r.manual.length) lines.push("run by hand:", ...r.manual.map((m) => `  ${m}`));
   if (r.verify) lines.push(`verify --fast: ${r.verify.empty ? "no checks yet" : r.verify.ok ? "green" : "RED"}`, ...r.verify.tail.split("\n").map((l) => `  ${l}`));
-  if (!r.dryRun && (r.installed.length || r.removed.length)) lines.push("Restart Claude Code to load the plugins' skills and hooks.");
+  if (r.mode === "update") lines.push("Restart Claude Code to load the updated plugins. Commit the refreshed files on a branch and open a PR.");
+  else if (!r.dryRun && (r.installed.length || r.removed.length)) lines.push("Restart Claude Code to load the plugins' skills and hooks.");
   return lines.join("\n");
 }
 
@@ -332,6 +387,7 @@ function parseArgs(argv) {
     else if (a === "--default-branch") o.defaultBranch = next();
     else if (a === "--no-install") o.noInstall = true;
     else if (a === "--dry-run") o.dryRun = true;
+    else if (a === "--update") o.update = true;
     else if (a === "--json") o.json = true;
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -343,7 +399,7 @@ const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(imp
 if (isMain) {
   try {
     const opts = parseArgs(process.argv.slice(2));
-    const r = bootstrap(opts.target, opts);
+    const r = opts.update ? update(opts.target, opts) : bootstrap(opts.target, opts);
     console.log(opts.json ? JSON.stringify(r, null, 2) : render(r));
     if (r.verify && !r.verify.ok) process.exitCode = 1;
   } catch (err) {

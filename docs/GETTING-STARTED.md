@@ -40,6 +40,18 @@ The new plugins' skills and hooks load on restart. Then commit the setup on a br
 
 Run `/core:plugins`. It shows the same checklist with your current plugins marked. Ticking a plugin installs and sets it up. Unticking one removes it together with the rules, CI blocks and verify steps it added. `core`, `governance` and `work-github` always stay.
 
+## Updating
+
+Run `/core:update` in the project, then restart Claude Code. It:
+
+1. updates every plugin the project uses, and installs any your clone lacks,
+2. refreshes the rules, CI blocks and scripts their setups manage. Files you edited are kept and listed, and you decide about each one,
+3. runs `verify --fast` and tells you what changed.
+
+When it changed files, one person commits them in a pull request; everyone else gets them with `git pull`.
+
+Stable plugins never break a project in a minor or patch update. A breaking change comes only in a major version, with a migration note that `/core:update` shows you.
+
 ## Common problems
 
 | Symptom | Fix |

@@ -1,5 +1,9 @@
 # Changelog — core
 
+## 1.2.0
+
+- **New skill `/core:update`:** one step to update the environment. It refreshes the marketplace and updates every plugin the project uses at its installed scope, installing any this clone lacks. It re-runs every setup with `--refresh`: managed rules, CI blocks and scripts are refreshed, while files the project edited are kept and listed. Then it runs `verify --fast` and points to the CHANGELOG lines and migration notes that matter (`bootstrap.mjs --update`).
+
 ## 1.1.1
 
 - CI lines `core:init` writes: `pnpm/action-setup` v6.1.1 (was v4.4.0) and `actions/setup-python` v7.1.0 (was v5.6.0). Both run on Node.js 24: GitHub-hosted runners are fine, self-hosted runners need v2.327.1 or newer. The inputs used (`python-version`; none for pnpm) are unchanged. New scaffolds only; an existing `ci.yml` is the project's.
